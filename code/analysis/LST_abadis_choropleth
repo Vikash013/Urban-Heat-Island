@@ -1,0 +1,305 @@
+
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▄▀
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄           COPY THIS URL LINK TO PLAY AROUND WITH THE CODE              ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄  https://code.earthengine.google.com/a16e3b701f8cf152e10f91f9fcd9cc14  ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀
+
+
+
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ################################# //
+// ######    Urban Heat       ###### //
+// ######       Explorer      ###### //
+// ################################# //
+
+/**
+ * This is a test dashboard where user can input customized shapefile for urban heat exploration.
+ * The output will be a choropleth map, where polygons in the vector layer 
+ * will be colored according to the attribute values and defined color scale.
+ */
+ 
+var helper = require('users/pinkychow1010/WB_IntraUrban:helper');
+var analysis = require('users/pinkychow1010/WB_IntraUrban:analysis_utils');
+
+var geometry = ee.FeatureCollection("projects/ee-pinkychow1010/assets/WB_GEE/lahore_katchi_abadis");
+
+// urban_lst_choropleth(geometry);
+
+// #################################
+// ######## Set Up Panels ## #######
+// #################################
+
+var location_input = ui.Textbox({
+  value: "projects/ee-pinkychow1010/assets/WB_GEE/lahore_katchi_abadis",
+  placeholder: 'Enter location asset here...',
+  onChange: function(value) {
+    // set value with a dedicated method
+    location_input.setValue(value);
+    return(value);
+  }
+});
+
+var loc;
+var button = ui.Button({
+  label: 'Start analysis',
+  onClick: function() {
+    loc = location_input.getValue();
+    geometry = ee.FeatureCollection(loc);
+    
+    Map.clear();
+    Map.centerObject(geometry, 12);
+    urban_lst_choropleth(geometry);
+  }
+});
+
+var mainPanel = ui.Panel({
+  style: {width: '300px'}
+});
+
+// set title
+var title = ui.Label({
+  value: 'Urban Heat Explorer',
+  style: {'fontSize': '24px'}
+});
+
+// add widgets to the panel
+mainPanel.add(title);
+
+var text_panel = ui.Panel({
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+
+text_panel.add(location_input);
+text_panel.add(button);
+mainPanel.add(text_panel);
+
+ui.root.add(mainPanel);
+
+// #################################
+// ######## Define Functions #######
+// #################################
+
+function urban_lst_choropleth(geometry) {
+  // Define config for visualization
+  var palette = ["fee5d9","fcbba1","fc9272","fb6a4a","ef3b2c","cb181d","99000d"];
+  
+  Map.centerObject(geometry, 12);
+  
+  // Check summer months based on geo-coordinates
+  var centroid = geometry.first().geometry().centroid();
+  var listCoords = ee.Array.cat(centroid.coordinates(), 0); 
+  var yCoords = ee.List(listCoords).getInfo()[1];
+  var south = ee.Number(yCoords).lt(0);
+  var shift = south.multiply(6).getInfo();
+  
+  // filter certain year
+  var start_year = ee.Date("2021-01-01");
+  var end_year = ee.Date("2022-01-01");
+  
+  var yearFilter = ee.Filter.date(
+    start_year.advance(-1, "year"), 
+    end_year.advance(1, "year")
+    );
+  
+  // filter summer time only
+  var summerFilter = ee.Filter.calendarRange(5+shift, 9-shift, "month");
+  
+  var landsat = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')
+    .map(maskL8sr)
+    .filter(yearFilter)
+    .filter(summerFilter)
+    .mean()
+    .clip(geometry);
+  
+  // derive LST from Landsat
+  var lst = calc_ls_lst(landsat);
+  
+  // compute min and max for legend scaling
+  var max = ee.Number(lst.reduceRegion({
+    reducer: ee.Reducer.percentile([95]), //ee.Reducer.max(),
+    geometry: geometry,
+    scale: 30,
+    maxPixels: 1e9
+    }
+    ).values().get(0));
+    
+  var min = ee.Number(lst.reduceRegion({
+    reducer: ee.Reducer.percentile([5]), //ee.Reducer.min(),
+    geometry: geometry,
+    scale: 30,
+    maxPixels: 1e9
+    }
+    ).values().get(0));
+  
+  // visualization parameters
+  var vis = {min:min.getInfo(), max:max.getInfo(), palette: palette};
+  
+  // get land cover dataset
+  var lulc = ee.ImageCollection('ESA/WorldCover/v200')
+  .first()
+  .clip(geometry);
+  
+  // get dense urban area only
+  var urban_mask = lulc.eq(50);
+  var lst_masked = lst.updateMask(urban_mask);
+  
+  // get trend using median reducer
+  var lst_mean = lst_masked.reduceRegions({
+    collection: geometry,
+    scale: 30,
+    reducer:  ee.Reducer.median()
+  });
+  
+  // get choropleth with zonal statistics
+  analysis.choropleth_map(
+    lst_mean, 
+    'median', 
+    palette
+    );
+}
+
+// // Define config for visualization
+// var palette = ["fee5d9","fcbba1","fc9272","fb6a4a","ef3b2c","cb181d","99000d"];
+
+// // area of interest
+// //var geometry = ee.FeatureCollection("projects/ee-pinkychow1010/assets/WB_GEE/karachi_union_council_subset");
+// var geometry = ee.FeatureCollection("projects/ee-pinkychow1010/assets/WB_GEE/karachi_katchi_abadis");
+
+// Map.centerObject(geometry, 12);
+
+// // Check summer months based on geo-coordinates
+// var centroid = geometry.first().geometry().centroid();
+// var listCoords = ee.Array.cat(centroid.coordinates(), 0); 
+// var yCoords = ee.List(listCoords).getInfo()[1];
+// var south = ee.Number(yCoords).lt(0);
+// var shift = south.multiply(6).getInfo();
+
+// var start_year = ee.Date("2021-01-01");
+// var end_year = ee.Date("2022-01-01");
+
+// var yearFilter = ee.Filter.date(
+//   start_year.advance(-1, "year"), 
+//   end_year.advance(1, "year")
+//   );
+
+// var summerFilter = ee.Filter.calendarRange(5+shift, 9-shift, "month");
+
+// var landsat = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')
+//   .map(maskL8sr)
+//   .filter(yearFilter)
+//   .filter(summerFilter)
+//   .mean()
+//   .clip(geometry);
+
+// var lst = calc_ls_lst(landsat);
+
+// var max = ee.Number(lst.reduceRegion({
+//   reducer: ee.Reducer.percentile([95]), //ee.Reducer.max(),
+//   geometry: geometry,
+//   scale: 30,
+//   maxPixels: 1e9
+//   }
+//   ).values().get(0));
+  
+// var min = ee.Number(lst.reduceRegion({
+//   reducer: ee.Reducer.percentile([5]), //ee.Reducer.min(),
+//   geometry: geometry,
+//   scale: 30,
+//   maxPixels: 1e9
+//   }
+//   ).values().get(0));
+
+// var vis = {min:min.getInfo(), max:max.getInfo(), palette: palette};
+// //Map.addLayer(lst, vis, "Landsat-based Land Surface Temperature");
+
+// var lulc = ee.ImageCollection('ESA/WorldCover/v200')
+// .first()
+// .clip(geometry);
+
+// var urban_mask = lulc.eq(50);
+// var lst_masked = lst.updateMask(urban_mask);
+
+// var lst_mean = lst_masked.reduceRegions({
+//   collection: geometry,
+//   scale: 30,
+//   reducer:  ee.Reducer.median()
+// });
+
+// analysis.choropleth_map(
+//   lst_mean, 
+//   'median', 
+//   palette
+//   );
+    
+    
+function calc_ls_lst(landsat) {
+    // #################################
+    // # calculating LST from landsat ##
+    // #################################
+    // https://gis.stackexchange.com/questions/314374/calculating-lst-from-landsat-8-in-google-earth-engine
+    // ndvi    
+    var ndvi = landsat.normalizedDifference(['B5', 'B4']).rename('NDVI');
+
+    //select thermal band 10(with brightness tempereature), no calculation 
+    var thermal= landsat.select('B10').multiply(0.1);
+    
+    // find the min and max of NDVI
+    var min_ndvi = ee.Number(ndvi.reduceRegion({
+      reducer: ee.Reducer.min(),
+      geometry: geometry,
+      scale: 30,
+      maxPixels: 1e9
+      }
+      ).values().get(0));
+    
+    var max_ndvi = ee.Number(ndvi.reduceRegion({
+      reducer: ee.Reducer.max(),
+      geometry: geometry,
+      scale: 30,
+      maxPixels: 1e9
+      }
+      ).values().get(0));
+    
+    // Fractional Vegetation
+    var fv = (ndvi.subtract(min_ndvi).divide(max_ndvi.subtract(min_ndvi)))
+      .pow(ee.Number(2))
+      .rename('FV'); 
+    
+    // Emissivity
+    var EM = fv.multiply(ee.Number(0.004)).add(ee.Number(0.986)).rename('EMM');
+    
+    // LST in Celsius Degree bring -273.15
+    var LST = thermal.expression(
+      '(Tb/(1 + (0.00115* (Tb / 1.438))*log(Ep)))-273.15', 
+      {
+        'Tb': thermal.select('B10'),
+        'Ep': EM.select('EMM')
+      }
+      ).rename('LST');
+    
+    return LST;
+}
+
+
+function maskL8sr(col) {
+  // #################################
+  // ###  Landsat 8 cloud mask   #####
+  // #################################
+  
+  // Bits 3 and 5 are cloud shadow and cloud, respectively.
+  var cloudShadowBitMask = (1 << 3);
+  var cloudsBitMask = (1 << 5);
+  
+  // Get the pixel QA band.
+  var qa = col.select('pixel_qa');
+  
+  // Both flags should be set to zero, indicating clear conditions.
+  var mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0)
+                 .and(qa.bitwiseAnd(cloudsBitMask).eq(0));
+  return col.updateMask(mask);
+}

@@ -1,0 +1,65 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var aoi = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[66.81383496093748, 25.08694754579853],
+          [66.81383496093748, 24.753172208743685],
+          [67.31920605468748, 24.753172208743685],
+          [67.31920605468748, 25.08694754579853]]], null, false);
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▄▀
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄           COPY THIS URL LINK TO PLAY AROUND WITH THE CODE              ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄  https://code.earthengine.google.com/4011fd1eae535838594fcb57e9a00791  ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀
+
+
+
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ################################### //
+// ###### Age group statistics  ###### //
+// ###### heat wave risk factor ###### //
+// ################################### //
+
+/**
+ * Compared to younger generation, senior population faces higher risk 
+ * in case of heatwave. This is a test script for displaying spatial 
+ * distribution of age-based risk factor.
+ */
+
+// collect worldpop data
+var ds = ee.ImageCollection('WorldPop/GP/100m/pop_age_sex').sum();
+
+// compute risk factor based on demographics
+var risk = ds.expression(
+                      '(total-M80-M75-M70-M65-M60-F80-F75-F70-F65-F60)/total*0.2 + ((M60+F60)/total)*0.4 + ((M65+F65)/total)*0.6 + ((M70+F70)/total)*0.8 + (M75+M80+F75+F80)/total', {
+                        'total' : ds.select('population'),
+                        'M60' : ds.select('M_60'),
+                        'M65' : ds.select('M_65'),
+                        'M70' : ds.select('M_70'),
+                        'M75' : ds.select('M_75'),
+                        'M80' : ds.select('M_80'),
+                        'F60' : ds.select('F_60'),
+                        'F65' : ds.select('F_65'),
+                        'F70' : ds.select('F_70'),
+                        'F75' : ds.select('F_75'),
+                        'F80' : ds.select('F_80')
+                      })
+                      .rename('risk');
+
+// mask out invalid pixels
+var mask = ds.select('population').gt(0);
+
+// display layer
+Map.addLayer(risk.updateMask(mask), {min:0.2, max:0.3, palette:['blue','white','red']}, 'Risk');
+
+Map.setCenter(67.083, 24.965, 11);

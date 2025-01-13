@@ -1,0 +1,167 @@
+// Description for Datasets
+
+exports.heat_hazard = "📖 Extreme Heat hazard\n\
+is classified based on an existing\n\
+and widely accepted heat stress\n\
+indicator, the Wet Bulb Globe\n\
+Temperature (WBGT, in °C), more\n\
+specifically the daily maximum WGBT.\n\
+【🖱️ Click heading to view project】";
+
+exports.kbdi = "📖 Keetch-Byram Drought\n\
+Index (KBDI) is a continuous\n\
+reference scale for estimating the\n\
+dryness of the soil and duff layers.\n\
+The index increases for each day\n\
+without rain and vice versa.\n\
+This index measure meteorological\n\
+drought, with scale ranges from 0\n\
+(no moisture deficit) to 800\n\
+(extreme drought). This layer\n\
+is limited to Asian Pacific counties.\n\
+【🖱️ Click heading to view project】";
+
+exports.lst = "📖 This dataset contains\n\
+atmospherically corrected surface\n\
+reflectance and land surface\n\
+temperature derived from the data\n\
+produced by the Landsat 9 OLI/TIRS\n\
+sensors. LST data is derived from B10\n\
+directly among imageries collected\n\
+during 2022 local summer daytime.\n\
+【🖱️ Click heading to view project】";
+
+
+exports.vcf = "📖 The Terra MODIS Vegetation\n\
+Continuous Fields (VCF) product is\n\
+a sub-pixel-level representation of\n\
+surface vegetation cover estimates\n\
+globally. This layer shows values of\n\
+the current year.\n\
+【🖱️ Click heading to view project】";
+
+exports.evi = "📖 The MOD13Q1 V6.1 product Vegetation\n\
+Index value at a per pixel basis.\n\
+The Enhanced Vegetation Index (EVI)\n\
+minimizes canopy background variations\n\
+and maintains sensitivity over dense\n\
+vegetation conditions. This layer\n\
+shows median value for 2022 summer.\n\
+【🖱️ Click heading to view project】";
+
+
+exports.hitisae = "📖 HiTiSAE is a gridded product\n\
+that contains widely adopted\n\
+human thermal-stress indices\n\
+(ESI, HI, Humidex, WBGT, WBT,\n\
+WCT, AT, NET), derived from\n\
+ECMWF ERA5-Land and ERA5 reanalysis\n\
+products, over South and East Asia\n\
+in 2019 summer.\n\
+【🖱️ Click heading to view project】";
+
+exports.worldcover = "📖 WorldCover provides the first\n\
+global land cover products for\n\
+2020 and 2021 at 10 m resolution,\n\
+developed and validated in near-real\n\
+time based on Sentinel-1 and Sentinel-2\n\
+data.\n\
+【🖱️ Click heading to view project】";
+ 
+exports.modis = "📖 In the MODIS dataset, The Land\n\
+Surface Temperature (LST) and Emissivity\n\
+daily data are retrieved at 1km pixels\n\
+by the generalized split-window algorithm\n\
+and at 6km grids by the day/night algorithm.\n\
+ 【🖱️ Click heading to view project】";
+ 
+exports.uhi = "📖 This dataset contains summertime\n\
+surface urban heat island (SUHI) intensities\n\
+(unit degree Celsius) for day and night\n\
+for over 10,000 urban clusters\n\
+throughout the world. \n\
+ 【🖱️ Click heading to view project】";
+ 
+exports.rwi = "📖 Provided by Facebook, the Relative \n\
+Wealth Index (RWI) predicts the\n\
+relative standard of living within\n\
+countries using connectivity data\n\
+and satellite imagery, via deep\n\
+learning model. The RWI has\n\
+proven useful for identifying pockets\n\
+of poverty and potential beneficiaries\n\
+ 【🖱️ Click heading to view project】";
+
+exports.cisi = "📖 Critical Infrastructure Spatial Index\n\
+(CISI) represents the global spatial\n\
+intensity of CI (transportation,\n\
+energy, water, waste, telecommunication,\n\
+education, and health). The dataset\n\
+is generated from Open Streetmap (2021).\n\
+It can be applied to explore the\n\
+current landscape of CI, identify CI\n\
+hotspots, and as exposure input\n\
+for large-scale risk assessments.\n\
+【🖱️ Click heading to view project】";
+
+exports.landscan = "📖 LandScan High-Definition (HD) is the\n\
+finest resolution global population\n\
+distribution data available and \n\
+represents an ambient population.\n\
+It is intended to aid in emergency\n\
+preparedness, recovery missions, \n\
+risk assessments and site\n\
+suitability studies.\n\
+【🖱️ Click heading to view project】";
+
+exports.urban = "📖 This urban density layer represents\n\
+the spatial density of urban\n\
+surface detected (% in 5km radius)\n\
+from satellite imagery. It is\n\
+extracted from ESA WorldCover\n\
+the first global land cover\n\
+products for 2020 and 2021\n\
+at 10 m resolution.\n\
+ 【🖱️ Click heading to view project】";
+
+exports.cropland = "📖 This cropland density layer\n\
+represents the spatial density of\n\
+agricultural fields detected\n\
+(% in 5km radius) from satellite\n\
+imagery. This layer is extracted\n\
+from ESA WorldCover the first\n\
+global land cover products for 2020\n\
+and 2021 at 10 m resolution.\n\
+ 【🖱️ Click heading to view project】";
+
+exports.forest = "📖 This forest density layer \n\
+represents the spatial density of\n\
+forest detected (% in 5km radius) \n\
+from satellite imagery. This layer\n\
+is extracted from ESA WorldCover\n\
+the first global land cover products\n\
+for 2020 and 2021 at 10 m resolution.\n\
+ 【🖱️ Click heading to view project】";
+
+exports.ghsl = "📖 The GHS-SMOD is the rural-\n\
+urban Settlement classification model\n\
+adopted by the GHSL. The layer\n\
+values range from 0 (inhabited)\n\
+to 3 (high density clusters). It is the\n\
+representation of the degree of\n\
+urbanization concept into the\n\
+GHSL data scenario.\n\
+【🖱️ Click heading to view project】";
+
+exports.pdsi = "📖 This PDSI layer represents\n\
+relative dryness from temperature\n\
+and precipitation data. It is\n\
+provided by TerraClimate, a dataset\n\
+of monthly climate and climatic\n\
+water balance for global terrestrial\n\
+surfaces from 1958-2019. These data\n\
+provide important inputs for ecological\n\
+and hydrological studies at global\n\
+scales that require high spatial\n\
+resolution and time-varying data. \n\
+【🖱️ Click heading to view project】";

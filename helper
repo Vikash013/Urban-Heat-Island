@@ -1,0 +1,819 @@
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ############################## //
+// ###  Analysis Helper Tool #### //
+// ############################## //
+
+// Import: 
+// var helper = require('users/pinkychow1010/WB_IntraUrban:helper');
+
+/**
+ * Color palette for data visualization
+ * User can reverse the palette list using .reverse()
+ * e.g. color.jet.reverse()
+ * 
+ * Example usage:
+ * var c = require('users/pinkychow1010/WB_IntraUrban:helper').color;
+ * var palette = c.magma
+ */
+exports.color = {
+  'reds': ["fff5f0","fee0d2","fcbba1","fc9272","fb6a4a","ef3b2c","cb181d","a50f15","67000d"],
+  'spectral': ["9e0142","d53e4f","f46d43","fdae61","fee08b","ffffbf","e6f598","abdda4","66c2a5","3288bd","5e4fa2"],
+  'coolwarm': ['#3B4CC0', '#6F91F2', '#A9C5FC', '#DDDDDD', '#F6B69B', '#E6745B', '#B40426'],
+  'warmcool': ['#B40426', '#E6745B', '#F6B69B', '#DDDDDD', '#A9C5FC', '#6F91F2', '#3B4CC0'],
+  'jet': ['#00007F', '#002AFF', '#00D4FF', '#7FFF7F', '#FFD400', '#FF2A00', '#7F0000'],
+  'magma': ['#000004', '#2C105C', '#711F81', '#B63679', '#EE605E', '#FDAE78', '#FCFDBF'],
+  'inferno': ['#000004', '#320A5A', '#781B6C', '#BB3654', '#EC6824', '#FBB41A', '#FCFFA4'],
+  'plasma': ['#0D0887', '#5B02A3', '#9A179B', '#CB4678', '#EB7852', '#FBB32F', '#F0F921'],
+  'viridis': ['#440154', '#433982', '#30678D', '#218F8B', '#36B677', '#8ED542', '#FDE725'],
+  'greens': ['#f7fcf5', '#c7e9c0', '#74c476', '#238b45', '#00441b']
+};
+
+
+/**
+ * Get temperol filter for local summer months
+ * @param  {geometry}     aoi geolocation
+ * @return {summerFilter} summer filter for the input location
+ */
+exports.get_summer = function get_summer(aoi) {
+  
+  try {
+    var centroid = aoi.geometry().centroid({'maxError': 1});
+  } catch (exception) {
+    var centroid = aoi.centroid({'maxError': 1});
+  }
+
+  var listCoords = ee.Array.cat(centroid.coordinates(), 0); 
+  
+  var yCoords = ee.List(listCoords).getInfo()[1];
+  var south = ee.Number(yCoords).lt(0);
+  
+  var shift = south.multiply(6).getInfo();
+  
+  var summerFilter = ee.Filter.calendarRange(5+shift, 9+shift, "month");
+  
+  return summerFilter;
+};
+
+
+/**
+ * Add color bar legend for image layer
+ * Source: https://mygeoblog.com/2017/03/02/creating-a-gradient-legend/
+ * 
+ * @param  {dict}    vis       Visualization params including min, max, and palette
+ * @param  {str}     title     Legend title
+ * @param  {int}     decimal   Decimal to round legend numerical labels
+ * @param  {str}     size      One of "small", "medium", "large". Use to define legend panel size
+ * @return {panel}   legendpos Legend panel to be added on the map object
+ */
+ 
+// vis shall contains only min, max and palette
+// other properties might lead to unexpected behaviors
+exports.add_colorbar = function add_color_bar(vis, title, decimal, size, position) {
+  
+  if (decimal === undefined || decimal === null){var decimal = 2};
+  if (title === undefined || title === null){var title = "Legend"};
+  if (size === undefined || size === null){var size = "large"};
+  if (position === undefined || position === null){var position = "bottom-right"};
+  
+  var legend_size = {
+    'large': {
+      'fontSize':'16px',
+      'thumbnail':'10x200'
+    },
+    'medium': {
+      'fontSize':'14px',
+      'thumbnail':'7x140'
+    },
+    'small': {
+      'fontSize':'12px',
+      'thumbnail':'5x100'
+    }
+  };
+  
+  var scale = legend_size[size];
+  
+  // set position of panel
+  var legendpos = ui.Panel({
+    style: {
+      position: position,//'bottom-right',
+      padding: '6px 10px'
+    }
+  });
+   
+  // Create legend title
+  var legendTitle = ui.Label({
+    value: title,
+    style: {
+      fontWeight: 'bold',
+      fontSize: scale.fontSize,//'16px',
+      margin: '0 0 4px 0',
+      padding: '0'
+      }
+  });
+  
+   // Add the title to the panel
+  legendpos.add(legendTitle); 
+  
+  // create the legend image
+  var lon = ee.Image.pixelLonLat().select('latitude');
+  var gradient = lon.multiply((vis.max-vis.min)/100).add(vis.min);
+  var legendImage = gradient.visualize(vis);
+  
+  // create text on top of legend
+  var panel = ui.Panel({
+      widgets: [
+        ui.Label(vis.max.toFixed(decimal))
+      ],
+    });
+  
+  legendpos.add(panel);
+    
+  // create thumbnail from the image
+  var thumbnail = ui.Thumbnail({
+    image: legendImage, 
+    params: {bbox:'0,0,10,100', dimensions:scale.thumbnail},//'10x200'},
+    style: {padding: '0.5px', position: 'bottom-center'}
+  });
+  
+  // add the thumbnail to the legend
+  legendpos.add(thumbnail);
+  
+  // create text on top of legend
+  var panel = ui.Panel({
+      widgets: [
+        ui.Label(vis.min.toFixed(decimal))
+      ],
+    });
+  
+  legendpos.add(panel);
+  
+  return legendpos;
+};
+
+/**
+ * Compute choropleth map with interactive inspector tool
+ * 
+ * @param  {featureCollection}  vector      Multipolygons for computing zonal statistics
+ * @param  {ee.Image}           raster      Image layer for computing zonal statistics
+ * @param  {ui.Map}             map         Map object which pop up panel will be displayed
+ * @param  {int}                log         Map object which pop up panel will be displayed
+ * @param  {str}                output_name Name of new property
+ * @param  {str}                legend_text Legend title
+ * @return {null}                           Choropleth map and inspector will be added on map object, return null
+ */
+exports.zonalInspect = function zonalInspect(
+  vector, raster, map, reducer, log, output_name, legend_text, palette
+  ) {
+    
+    // import modules
+    var palettes = require('users/gena/packages:palettes');
+    var analysis = require('users/pinkychow1010/WB_IntraUrban:analysis_utils');
+    
+    if (reducer === undefined || reducer === null){var reducer = "mean"};
+    if (log === undefined || log === null){var log = 0};
+    if (palette === undefined || palette === null){var palette = palettes.colorbrewer.RdBu[6]};
+    
+    var reducer_column = {
+      "mean": ee.Reducer.mean,
+      "median": ee.Reducer.median,
+      "sum": ee.Reducer.sum
+    };
+    
+    // set dark theme for label
+    var dark_theme = {
+        'backgroundColor': 'black',
+        'color': 'white'
+      };
+    
+    // set cursor
+    if (map === undefined || map === null){
+      Map.style().set('cursor', 'crosshair');  
+    } else {
+      map.style().set('cursor', 'crosshair');
+    }
+    
+    // sample raster values with vector layer
+    
+    if (output_name === undefined || output_name === null){
+      
+      var zonal = raster.reduceRegions({
+        collection: vector,
+        scale: 500,
+        reducer:  reducer_column[reducer]().setOutputs([reducer]) // new property from reducer
+      });
+      var attribute = reducer; // set as attribute
+      
+    } else {
+      
+      var zonal = raster.reduceRegions({
+        collection: vector,
+        scale: 500,
+        reducer:  reducer_column[reducer]().setOutputs([output_name]) // new property from reducer
+      });
+      var attribute = output_name; // set as attribute
+      
+    }
+
+    
+    // initial label for inspector
+    var click = ui.Label('Click for info');
+    var inspector = ui.Panel([click]);
+    
+    // add tool to map object
+    if (map === undefined || map === null){
+      Map.add(inspector);  
+    } else {
+      map.add(inspector); 
+    }
+    
+    // set dark theme
+    click.style().set(dark_theme);
+    inspector.style().set(dark_theme);
+    
+    // since for some countries most of the values are missing,
+    // error handling is required
+    // also to inform user for no data case
+    
+    // check out those countries by calculating missing ratio
+    var full_size = zonal.size(); // total polygons
+    var data_size = zonal.filter(ee.Filter.notNull([attribute])).size(); // total polygons with data
+    var missing_ratio = ee.Number(1).subtract(data_size.divide(full_size)); // get missing value proportion
+    
+    // if missing value are too high, it is very possible that the remaining data is unreliable
+    // in this case the whole country will be treated as NO DATA
+    if (missing_ratio.getInfo() > 0.2){ // use getInfo to compare with number rather than ee.Number Object which always return 1
+      var no_data_label = ui.Label({value: "NO DATA"}); // show no data
+      no_data_label.style().set(dark_theme); // set dark theme
+      inspector.widgets().set(0, no_data_label);
+      
+      return null; // skip the choropleth part
+    }
+    
+    // internal functions for get polygon property
+    var getPolyLabel = function(coords) {
+      
+      // initial label
+      inspector.widgets().set(0, ui.Label({
+        value: 'Loading...',
+        style: dark_theme
+      }));
+      
+      // get click coordinates
+      var click_point = ee.Geometry.Point(coords.lon, coords.lat);
+      
+      // get polygon names from sampled zonal layer
+      var id_list = zonal.reduceColumns(ee.Reducer.toList(), ['shapeName']).get('list');
+      
+      // get polygon attributes from sampled zonal layer
+      var attribute_list = zonal.reduceColumns(ee.Reducer.toList(), [attribute]).get('list');
+      
+      // get feature list from sampled zonal layer
+      var shp_lst = zonal.toList(zonal.size());
+      
+      // get id of the clicked polygon
+      var out = shp_lst.map(function (element) {
+        var idx = shp_lst.indexOf(element);
+        var overlap = ee.Feature(element).intersects(click_point);
+        var target_id = ee.Algorithms.If(overlap, idx, 0);
+        return target_id;
+      }).removeAll([0]); // perserve only target index
+      
+      try {
+        out = out.get(0).getInfo(); // target index
+        var id = ee.List(id_list).get(out); // target name
+        var attribute_value = ee.List(attribute_list).get(out); // target attribute value
+        
+        // set label layout
+        var value_label = ui.Label({
+            value: id.getInfo() + " " + attribute_value.getInfo().toFixed(2) // round to 2 decimals
+          });
+        
+        // set dark theme for widgets
+        value_label.style().set(dark_theme);
+        
+        inspector.widgets().set(0, value_label);
+      } catch(e) {
+        // empty label if no overlap
+        var empty_label = ui.Label({value: ""});
+        empty_label.style().set(dark_theme); // set dark theme
+        inspector.widgets().set(0, empty_label);
+      }
+    };
+
+  // var palette = palettes.colorbrewer.RdBu[6]; // color map
+  // var log = 0; // option for log scale
+  var class_n = 6; // number of class/ bins
+  var title = "Layer Mean"; // layer name
+  var opacity = 0.9; // layer transparancy
+  var size = "small";
+  
+  // display vector layer with inspector function to map object
+  if (map === undefined || map === null){
+    // add choropleth map
+    try {
+      analysis.choropleth_map(
+        zonal, 
+        attribute, 
+        palette, 
+        opacity, 
+        log, 
+        class_n, 
+        title,
+        null,
+        null,
+        size,
+        legend_text
+        );
+    } catch(e) {
+      // if choropleth map does not run through, it is properly due to missing data
+      // show no data label in this case
+      var no_data_label = ui.Label({value: "NO DATA"});
+      no_data_label.style().set(dark_theme); // set dark theme
+      inspector.widgets().set(0, no_data_label);
+    }
+
+    
+    Map.centerObject(vector);
+    Map.onClick(getPolyLabel); // add on click interations
+    
+  } else {
+    // add choropleth map
+    try {
+      analysis.choropleth_map(
+        zonal, 
+        attribute, 
+        palette, 
+        opacity, 
+        log, 
+        class_n, 
+        title,
+        map,
+        null,
+        size,
+        legend_text
+        );
+    } catch(e) {
+      // no data case
+      var no_data_label = ui.Label({value: "NO DATA"});
+      no_data_label.style().set(dark_theme); // set dark theme
+      inspector.widgets().set(0, no_data_label);
+    }
+
+    map.centerObject(vector); // zoom to aoi
+    map.onClick(getPolyLabel);  // add on click interactions
+  }
+};
+
+
+/**
+ * Add pop up panel
+ * 
+ * @param  {str}  title       Heading
+ * @param  {str}  content     Message
+ * @param  {map}  ui.Map      Map object which pop up panel will be displayed
+ * @return {null}             Panel will be added on map object, return null
+ */
+exports.add_popup = function add_popup(title, content, map, url) {
+
+  // set style for elements
+  var msg_style = {
+    whiteSpace: 'pre', 
+    textAlign: 'center', 
+    padding: '0px 5px 5px 5px',
+    width:  '95%',
+    minWidth: '280px',
+    maxWidth: '350px',
+    color: 'grey',
+    fontSize: '12px'
+  };
+  
+  var hd_style = {
+      whiteSpace: 'pre', 
+      textAlign: 'center', 
+      padding: '10px 5px 10px 5px',
+      width: '95%',
+      minWidth: '280px',
+      maxWidth: '350px',
+      fontSize: '18px', 
+      fontWeight:'bold'
+    };
+  
+  var button_style = {
+    padding:'10% 42.5% 10% 42.5%',
+    position: 'top-center'
+  };
+  
+  var page_style = {
+    border: '7px solid #c9c9c9',
+    position: 'top-center',
+    width: '90%',
+    maxWidth: '380px',
+    height: '450px'
+  };
+  
+  function hide(widget) {
+    widget.style().set({shown: false});
+  }
+  
+  var start_button = ui.Button({
+    label: title,
+    onClick: message,
+    style: {
+      backgroundColor: '#ffffff00',
+      position: 'bottom-center',
+      fontSize: '30px',
+      width: '180px',
+      height: '50px'
+      // border: '2px solid #006C99'
+    }
+  });
+  
+  // pop up panel once the button is clicked
+  function message(){
+    // add styled message
+    var instructionMessage = ui.Label(content, msg_style);
+    // instructionMessage.style().set(msg_style);
+    
+    // add styled close button
+    var okButton = ui.Button('close', ok);
+    okButton.style().set(button_style);
+    function ok() {hide(instructionPanel)}
+    
+    // add title as panel heading
+    var heading = ui.Label(title);
+    heading.style().set(hd_style);
+    
+    if (url !== undefined || url !== null){
+      heading.setUrl(url);
+    }
+    
+    // construct panel
+    var instructionPanel = ui.Panel([heading, instructionMessage, okButton]);
+    instructionPanel.style().set(page_style);
+    
+    // display panel
+    if (map === undefined || map === null){
+      Map.add(instructionPanel);
+    } else {
+      map.add(instructionPanel);
+    }
+  }
+  
+  // add label button on map
+  if (map === undefined || map === null){
+      Map.add(start_button);
+    } else {
+      map.add(start_button);
+    }
+};
+
+/**
+ * Add one pager pop up panel
+ * 
+ * @param  {str}  p1_heading     Heading for each page
+ * @param  {str}  p1_message     Message for each page
+ * @param  {map}  ui.Map             Map object which pop up panel will be displayed
+ * @return {null}                    Panel will be added on map object, return null
+ */
+exports.addOnePage = function addOnePage(
+  p1_heading, p1_message, map
+  ) {
+  
+  // set style for elements
+  var msg_style = {
+    whiteSpace: 'pre', 
+    textAlign: 'center', 
+    padding: '0px 50px 50px 50px',
+    width: '500px',
+    color: 'grey',
+    fontSize: '15px'
+  };
+  
+  var hd_style = {
+      whiteSpace: 'pre', 
+      textAlign: 'center', 
+      padding: '50px 50px 0px 50px',
+      width: '500px',
+      fontSize: '26px', 
+      fontWeight:'bold'
+    };
+  
+  var button_style = {
+    padding:'0% 42.5% 20% 42.5%',
+    position: 'top-center'
+  };
+  
+  var page_style = {border: '5px solid #c9c9c9', position: 'top-center'};
+  
+  // Page 1
+  var instructionMessage = ui.Label(p1_message, msg_style);
+    
+  var heading = ui.Label(p1_heading, hd_style);
+  
+  function hide(widget) {
+    widget.style().set({shown: false});
+  }
+  
+  
+  var okButton = ui.Button('OK', ok);
+  okButton.style().set(button_style);
+  
+  function ok() {hide(instructionPanel_p1)}
+  
+  // construct pages
+  var instructionPanel_p1 = ui.Panel([heading, instructionMessage, okButton]);
+
+  instructionPanel_p1.style().set(page_style);
+  
+  if (map === undefined || map === null){
+      Map.add(instructionPanel_p1);
+    } else {
+      map.add(instructionPanel_p1);
+    }
+};
+
+/**
+ * Add two pager pop up panel
+ * 
+ * @param  {str}  p[1-2]_heading     Heading for each page
+ * @param  {str}  p[1-2]_message     Message for each page
+ * @param  {map}  ui.Map             Map object which pop up panel will be displayed
+ * @return {null}                    Panel will be added on map object, return null
+ */
+exports.addTwoPage = function addTwoPage(
+  p1_heading, p1_message,
+  p2_heading, p2_message,
+  map
+  ) {
+  
+  // set style for elements
+  var msg_style = {
+    whiteSpace: 'pre', 
+    textAlign: 'center', 
+    padding: '0px 50px 50px 50px',
+    width: '500px',
+    color: 'grey',
+    fontSize: '15px'
+  };
+  
+  var hd_style = {
+      whiteSpace: 'pre', 
+      textAlign: 'center', 
+      padding: '50px 50px 0px 50px',
+      width: '500px',
+      fontSize: '26px', 
+      fontWeight:'bold'
+    };
+  
+  var button_style = {
+    padding:'0% 42.5% 20% 42.5%',
+    position: 'top-center'
+  };
+  
+  var page_style = {border: '5px solid #c9c9c9', position: 'top-center'};
+  
+  // Page 1
+  var instructionMessage = ui.Label(p1_message, msg_style);
+    
+  var heading = ui.Label(p1_heading, hd_style);
+  
+  // Page 2
+  var instructionMessage_p2 = ui.Label(p2_message, msg_style);
+    
+  instructionMessage_p2.style().set({padding: '0px 50px 20px 50px'});
+  
+  var heading_p2 = ui.Label(p2_heading, hd_style);
+  
+  // Welcome panel first page
+  var nextButton = ui.Button('Next', p2);
+  nextButton.style().set(button_style);
+  
+  function hide(widget) {
+    widget.style().set({shown: false});
+  }
+  
+  function p2() {
+    hide(instructionPanel_p1);
+    if (map === undefined || map === null){
+      Map.add(instructionPanel_p2);
+    } else {
+      map.add(instructionPanel_p2);
+    }
+  }
+  
+  var okButton = ui.Button('OK', ok);
+  okButton.style().set(button_style);
+  
+  function ok() {hide(instructionPanel_p2)}
+  
+  // construct pages
+  var instructionPanel_p1 = ui.Panel([heading, instructionMessage, nextButton]);
+  var instructionPanel_p2 = ui.Panel([heading_p2, instructionMessage_p2, okButton]);
+
+  instructionPanel_p1.style().set(page_style);
+  instructionPanel_p2.style().set(page_style);
+  
+  if (map === undefined || map === null){
+      Map.add(instructionPanel_p1);
+    } else {
+      map.add(instructionPanel_p1);
+    }
+};
+
+/**
+ * Add three pager pop up panel
+ * 
+ * @param  {str}  p[1-3]_heading     Heading for each page
+ * @param  {str}  p[1-3]_message     Message for each page
+ * @param  {map}  ui.Map             Map object which pop up panel will be displayed
+ * @return {null}                    Panel will be added on map object, return null
+ */
+exports.addThreePage = function addThreePage(
+  p1_heading, p1_message,
+  p2_heading, p2_message,
+  p3_heading, p3_message,
+  map
+  ) {
+  
+  // set style for elements
+  var msg_style = {
+    whiteSpace: 'pre', 
+    textAlign: 'center', 
+    padding: '0px 10px 30px 10px',
+    width: '95%',
+    color: 'grey',
+    fontSize: '12px'
+  };
+  
+  var hd_style = {
+      whiteSpace: 'pre', 
+      textAlign: 'center', 
+      padding: '30px 30px 0px 30px',
+      width: '95%',
+      fontSize: '24px', 
+      fontWeight:'bold'
+    };
+  
+  var button_style = {
+    padding:'0% 42.5% 20% 42.5%',
+    position: 'top-center'
+  };
+  
+  var page_style = {
+    border: '5px solid #c9c9c9', 
+    position: 'top-center',
+    width: '85%'
+  };
+  
+  // Page 1
+  var instructionMessage = ui.Label(p1_message, msg_style);
+    
+  var heading = ui.Label(p1_heading, hd_style);
+  
+  // Page 2
+  var instructionMessage_p2 = ui.Label(p2_message , msg_style);
+
+  var heading_p2 = ui.Label(p2_heading, hd_style);
+  
+  // Page 3
+  var instructionMessage_p3 = ui.Label(p3_message, msg_style);
+    
+  instructionMessage_p3.style().set({padding: '0px 50px 20px 50px'});
+  
+  var heading_p3 = ui.Label(p3_heading, hd_style);
+  
+  // Welcome panel first page
+  var nextButton = ui.Button('Next', p2);
+  nextButton.style().set(button_style);
+  
+  function hide(widget) {
+    widget.style().set({shown: false});
+  }
+  
+  function p2() {
+    hide(instructionPanel_p1);
+    if (map === undefined || map === null){
+      Map.add(instructionPanel_p2);
+    } else {
+      map.add(instructionPanel_p2);
+    }
+  }
+  
+  // Welcome panel second page
+  var nextButton_p3 = ui.Button('Next', p3);
+  nextButton_p3.style().set(button_style);
+  
+  function p3() {
+    hide(instructionPanel_p2);
+    if (map === undefined || map === null){
+      Map.add(instructionPanel_p3);
+    } else {
+      map.add(instructionPanel_p3);
+    }
+  }
+  
+  // Welcome panel third page
+  var okButton = ui.Button('OK', ok);
+  okButton.style().set(button_style);
+  
+  function ok() {hide(instructionPanel_p3)}
+  
+  // construct pages
+  var instructionPanel_p1 = ui.Panel([heading, instructionMessage, nextButton]);
+  var instructionPanel_p2 = ui.Panel([heading_p2, instructionMessage_p2, nextButton_p3]);
+  var instructionPanel_p3 = ui.Panel([heading_p3, instructionMessage_p3, okButton]);
+
+  instructionPanel_p1.style().set(page_style);
+  instructionPanel_p2.style().set(page_style);
+  instructionPanel_p3.style().set(page_style);
+  
+  if (map === undefined || map === null){
+      Map.add(instructionPanel_p1);
+    } else {
+      map.add(instructionPanel_p1);
+    }
+};
+
+/**
+ * Plotting two climate variables for each feature in the vector feature collection in a bar chart
+ * 
+ * @param  {featureCollection}  vector     Vector layer with multiple polygons for zonal mean calculation
+ * @param  {ee.Image}           layer1     Image for first climate variable
+ * @param  {ee.Image}           layer2     Image for second climate variable
+ * @param  {str}                var1       Variable 1 name for chart display
+ * @return {ui.Chart}           var2       Variable 2 name for chart display
+ */
+exports.chart_climate_var = function chart_climate_var(vector, layer1, layer2, var1, var2) {
+  
+  // remove special characters to avoid errors in charting
+  var1 = var1.replace(/([^\w ]|_)/g, '');
+  var2 = var2.replace(/([^\w ]|_)/g, '');
+  
+  // Sample raster values
+  var zonal = layer1.reduceRegions({
+    collection: vector,
+    scale: 500,
+    reducer:  ee.Reducer.mean().setOutputs([var1]) // define output column name
+  });
+  
+  zonal = layer2.reduceRegions({
+    collection: zonal,
+    scale: 500,
+    reducer:  ee.Reducer.mean().setOutputs([var2]) // define output column name
+  });
+  
+  // remove polygons with null values
+  zonal = zonal.filter(ee.Filter.notNull([var1])).filter(ee.Filter.notNull([var2]));
+
+  // Set layout options for the chart
+  var chartStyle = {
+    title: 'Comparison of Climate Risk Variables (regional mean)',
+    series: {
+         0: {
+             targetAxisIndex: 0
+            } ,
+         1: {
+             targetAxisIndex: 1
+            }
+        } ,
+    hAxis: {
+      title: 'Admin Regions', // x label
+      textStyle: {color: 'gray'},
+      titleTextStyle: {color: 'gray', italic: false, bold: true},
+      gridlines: {color: 'FFFFFF00'}
+    },
+    vAxis: {
+      title: '', // y label
+      titleTextStyle: {color: 'gray', italic: false, bold: true},
+      textStyle: {color: 'gray'},
+      gridlines: {color: '#006C9980'},
+      format: 'short',
+      baselineColor: '#006C9960'
+    },
+    chartArea: {backgroundColor: 'EBEBEB00'}
+  };
+  
+  // return 0 in case of no data
+  if (zonal.size().getInfo() < 1){
+    return zonal.size().getInfo();
+  }
+  
+  try {
+    // Construct chart object
+    var chart =
+        ui.Chart.feature
+            .byFeature({
+              features: zonal.select(['shapeName',var1,var2]),
+              xProperty: 'shapeName',
+              yProperties: [var1,var2] // display multiple variables
+            })
+            .setChartType('ColumnChart'); // bar chart
+    
+    // Display chart
+    return chart.setOptions(chartStyle);
+    
+  } catch (error) {
+    return null; // if chart cannot plot successfully return null
+  }
+};

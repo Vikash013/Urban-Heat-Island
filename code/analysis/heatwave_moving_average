@@ -1,0 +1,143 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[66.81099224901611, 25.119577245105067],
+          [66.81099224901611, 24.745986882248864],
+          [67.34382916307861, 24.745986882248864],
+          [67.34382916307861, 25.119577245105067]]], null, false);
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▄▀
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄           COPY THIS URL LINK TO PLAY AROUND WITH THE CODE              ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄  https://code.earthengine.google.com/25037f8b94d28d3282a9f0417a3ea917  ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀
+
+
+
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ##################################### //
+// ######    Historical Heatwaves ###### //
+// ######       Detection         ###### //
+// ##################################### //
+
+/**
+ * Using 5 day moving window to detect abnormal heat anomaly (heatwave)
+ * using MODIS compared to long-term average (90th percentile)
+ */
+
+var startdate = ee.Date.fromYMD(2010,1,1);
+var enddate = ee.Date.fromYMD(2022,12,31);
+
+// Filter data
+var collection = ee.ImageCollection('MODIS/006/MOD11A1')
+  .select('LST_Day_1km')
+  .filterBounds(geometry)
+  .filterDate(startdate, enddate);
+  
+var join = ee.Join.saveAll({
+  matchesKey: 'images'
+});
+
+var timeField = 'system:time_start';
+
+var diffFilter = ee.Filter.maxDifference({
+  difference: 1000 * 60 * 60 * 24 * 5,
+  leftField: timeField, 
+  rightField: timeField
+});
+
+var threeNeighborJoin = join.apply({
+  primary: collection, 
+  secondary: collection, 
+  condition: diffFilter
+})
+
+var smoothed = ee.ImageCollection(threeNeighborJoin.map(function(image) {
+  var collection = ee.ImageCollection.fromImages(image.get('images'));
+  return ee.Image(image).addBands(collection.min())
+  .copyProperties({
+        source: image,
+        properties: ['system:time_start']
+      });
+}));
+
+var smoothed_deg = smoothed.map(function(image) {
+  return image.multiply(0.02).subtract(273.15)
+  .copyProperties({
+        source: image,
+        properties: ['system:time_start']
+      });
+}) 
+
+
+Map.addLayer(smoothed_deg.first().clip(geometry), {}, 'Lowest LST in 5 Days');
+// print(collection)
+
+
+// return the list of coordinates
+var listCoords = ee.Array.cat(geometry.coordinates(), 1); 
+
+// get the Y-coordinates
+var yCoords = listCoords.slice(1, 1, 2)
+
+// reduce the arrays
+var yMin = yCoords.reduce('min', [0]).get([0,0])
+var yMax = yCoords.reduce('max', [0]).get([0,0])
+
+var south = yMin.add(yMax).divide(2).lt(0);
+var shift = south.multiply(6).getInfo();
+
+var summerFilter = ee.Filter.calendarRange(5+shift, 9+shift, "month");
+                  
+var ds = ee.ImageCollection('IDAHO_EPSCOR/TERRACLIMATE')
+.filter(ee.Filter.date('1980-01-01', '2011-01-01'));
+
+print(ds);
+
+var max = ds.select('tmmx')
+.filter(summerFilter)
+.reduce(ee.Reducer.percentile([95]), 300)
+.clip(geometry)
+.multiply(0.1)
+.reduceRegion({
+  reducer: ee.Reducer.median(),
+  geometry: geometry,
+  scale: 1000
+})
+.get('tmmx_p95');
+
+var threshold = ee.Image.constant(max).rename('p95').double();
+smoothed_deg = smoothed_deg.map(function(image) {
+  return image.addBands(threshold);
+});
+
+print(smoothed_deg);
+
+var chart = ui.Chart.image.series({
+  imageCollection: smoothed_deg.select(['LST_Day_1km_1','p95']),
+  region: geometry,
+  reducer: ee.Reducer.median(),
+  scale: 1000
+}).setOptions({
+      lineWidth: 1,
+      title: 'LST Time Series',
+      interpolateNulls: true,
+      vAxis: {title: 'Temperature',viewWindow: {min: 10, max: 50}},
+      hAxis: {title: 'Time', format: 'YYYY-MMM'},
+      explorer: {}
+    })
+print(chart);
+
+
+

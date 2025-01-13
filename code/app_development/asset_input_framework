@@ -1,0 +1,65 @@
+
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▄▀
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄           COPY THIS URL LINK TO PLAY AROUND WITH THE CODE              ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄  https://code.earthengine.google.com/566fc8b2465ddd03d26068a42febcdcd  ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀
+
+
+
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ################################# //
+// ######    Asset Input      ###### //
+// ######    Panel            ###### //
+// ################################# //
+
+/**
+ * This is a test script to create a panel where users can upload their 
+ * own earth engine assets to perform geospatial analysis
+ */
+
+var location_input = ui.Textbox({
+  value: "",//"projects/ee-pinkychow1010/assets/WB_GEE/lahore_katchi_abadis",
+  placeholder: 'Enter location asset here...',
+  onChange: function(value) {
+    // set value with a dedicated method
+    location_input.setValue(value);
+    return(value);
+  }
+});
+
+var loc;
+var button = ui.Button({
+  label: 'Start analysis',
+  onClick: function() {
+    loc = location_input.getValue();
+    Map.centerObject(ee.FeatureCollection(loc), 12);
+  }
+});
+
+var mainPanel = ui.Panel({
+  style: {width: '300px'}
+});
+
+// set title
+var title = ui.Label({
+  value: 'Urban Heat Explorer',
+  style: {'fontSize': '24px'}
+});
+
+// add widgets to the panel
+mainPanel.add(title);
+
+var text_panel = ui.Panel({
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+
+text_panel.add(location_input);
+text_panel.add(button);
+mainPanel.add(text_panel);
+
+ui.root.add(mainPanel);

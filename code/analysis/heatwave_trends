@@ -1,0 +1,131 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var geometry = 
+    /* color: #d63000 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[66.98559488862118, 24.93845195500201],
+          [66.98559488862118, 24.858730389002545],
+          [67.0583793124493, 24.858730389002545],
+          [67.0583793124493, 24.93845195500201]]], null, false),
+    table = ee.FeatureCollection("projects/ee-pinkychow1010/assets/WB_GEE/karachi_katchi_abadis");
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▄▀
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄           COPY THIS URL LINK TO PLAY AROUND WITH THE CODE              ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄  https://code.earthengine.google.com/a071fdcfd17bb249fa368e4a8325d6e6  ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀
+
+
+
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ################################# //
+// ######    Urban Heat       ###### //
+// ######       Explorer      ###### //
+// ################################# //
+
+/**
+ * Counting very hot days using an absolute temperature threshold 
+ * for MODIS daily imagery
+ */
+
+var ds = ee.ImageCollection('IDAHO_EPSCOR/TERRACLIMATE')//.sum();
+print(ds);
+
+var max = ds.select('tmmx').reduce(ee.Reducer.percentile([90]), 300).clip(geometry).multiply(0.1);
+//print(max)
+
+var start_year = ee.Date("2019-01-01");
+var end_year = ee.Date("2021-01-01");
+
+var yearFilter = ee.Filter.date(
+  start_year.advance(-1, "year"), 
+  end_year.advance(1, "year")
+  );
+
+
+Map.addLayer(max, {
+  min: 30, max: 45, palette: ['navy','blue','yellow','red']
+}, "P90 Max Temp");
+
+Map.setOptions('HYBRID');
+Map.centerObject(geometry, 10)
+
+
+var startDate = ee.Date.fromYMD(2001, 1, 1)
+var endDate = ee.Date.fromYMD(2023, 1, 1)
+
+var collection = ee.ImageCollection('MODIS/006/MOD11A1')
+  .filterBounds(geometry)
+
+var numberOfMonths = endDate.difference(startDate, 'months').floor()
+var daysAboveThres = ee.ImageCollection(
+  ee.List.sequence(0, numberOfMonths.subtract(1))
+    .map(veryHotDays)
+)
+
+
+print(daysAboveThres.first());
+
+// print("numberOfMonths: ",numberOfMonths);
+
+var getMean = function(image) {
+  // Reducing region and getting value
+  var value = ee.Image(image)
+    .reduceRegion(ee.Reducer.median(), geometry, 1000)
+    .get('LST_Day_1km');
+  return value;
+};
+
+var count = daysAboveThres.size();
+var listOfImages = daysAboveThres.toList(count);
+var veryHotDays_list = listOfImages.map(getMean);
+
+print(listOfImages);
+
+
+function veryHotDays(offset) {
+  var date = startDate.advance(offset, 'months');
+  return collection
+    .select('LST_Day_1km')
+    .filterDate(date, date.advance(3, 'months'))
+    .map(function (image) {
+      var degree = image.multiply(0.02).subtract(273.15)
+      var veryHot = degree.gte(40)
+      return image.updateMask(veryHot)
+    })
+    .count()
+    .unmask(0)
+    .clip(geometry)
+    .set('date', date.format('yyyy-MM-dd'))
+}
+
+
+var chart = ui.Chart.array.values(
+  {array: veryHotDays_list, axis: 0, xLabels: daysAboveThres.aggregate_array('date')}
+  )
+                .setOptions({
+                  title: 'Trends of Very Hot Days',
+                  hAxis: {
+                    title: 'Month',
+                    titleTextStyle: {italic: false, bold: true}
+                  },
+                  vAxis: {
+                    title: 'Day Count',
+                    viewWindow: {min: 0, max: 30},
+                    titleTextStyle: {italic: false, bold: true}
+                  },
+                  colors: ['red'],
+                  lineSize: 2,
+                  pointSize: 0,
+                  legend: {position: 'none'}
+                });
+                
+print(chart);

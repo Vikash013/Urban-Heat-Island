@@ -1,0 +1,283 @@
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ####################################### //
+// ######    Map Comparison App     ###### //
+// ####################################### //
+
+
+/**
+ * This is a script for comparing layers between national admin regions.
+ * 
+ *
+ */
+
+// import modules 
+var palettes = require('users/gena/packages:palettes');
+var analysis = require('users/pinkychow1010/WB_IntraUrban:analysis_utils');
+var helper = require('users/pinkychow1010/WB_IntraUrban:helper');
+var style = require('users/pinkychow1010/WB_IntraUrban:map_compare_style'); // dict for app styling
+var basemap = require('users/pinkychow1010/WB_IntraUrban:basemap_resources'); 
+
+
+/**
+ * Comparison Map: App which composes of a main panel with several widgets
+ * User can control the panel to visualize choropleth map for two different climate variables
+ * 
+ * This function is used to construct the variable comparison app
+ * 
+ * @author Ka Hei Chow.
+ *
+ * @fires   add main panel with variable and location selections, add welcome instruction message
+ *
+ * @param {dict}   layer_dict      A dict with data layer as keys and get dataset functions as values.
+ * @param {dict}   info_dict       A dict with data layer as keys and data layer descriptions as values.
+ * @param {dict}   url_dict        A dict with data layer as keys and project url as values.
+ * @param {dict}   log_dict        A dict with data layer as keys and log visualization options as values.
+ * @param {dict}   legend_dict     A dict with data layer as keys and legend titles as values.
+ *
+ * @return {null} null.
+ *
+ */
+exports.comparison_app = function(layer_dict, info_dict, url_dict, log_dict, legend_dict, color_dict) {
+  // import project data layers for admin level selections
+  var ADM0 = ee.FeatureCollection("projects/sat-io/open-datasets/geoboundaries/CGAZ_ADM0");
+  var ADM1 = ee.FeatureCollection("projects/sat-io/open-datasets/geoboundaries/CGAZ_ADM1");
+  var ADM2 = ee.FeatureCollection("projects/sat-io/open-datasets/geoboundaries/CGAZ_ADM2");
+  
+  // customized basemap to enhance visuals 
+  var new_basemap = basemap.getCustomBasemap('MutedMonotone');
+  
+  // set all map controls
+  var mapControl = style.mapControl;
+  
+  // Create two maps with custom options
+  // left map
+  var map1 = ui.Map();
+  map1.style().set('cursor', 'crosshair'); // set cursor shape
+  map1.setControlVisibility(mapControl); // hide unnecessary map controls to give space
+  
+  // right map
+  var map2 = ui.Map();
+  map2.style().set('cursor', 'crosshair'); // cursor shape
+  map2.setControlVisibility(mapControl); // set map control
+  map2.setControlVisibility({zoomControl: false}) ;
+  
+  // customized basemap for both maps to enhance visuals
+  map1.setOptions(undefined, {'Custom': new_basemap});
+  map2.setOptions(undefined, {'Custom': new_basemap});
+  
+  // link control between two maps
+  var linker = ui.Map.Linker([map1, map2]);
+  
+  // create a grid of maps
+  var mapGrid = ui.Panel(
+      [ui.Panel([map1], null, {stretch: 'both'}),
+        ui.Panel([map2], null, {stretch: 'both'})],
+      ui.Panel.Layout.Flow('horizontal'), {stretch: 'both'}
+      );
+  
+  // main panel on the side for argument selections
+  var mainPanel = ui.Panel();
+  mainPanel.style().set(style.mainPanel); // define style
+  
+  // Add the maps and title to the ui.root.
+  ui.root.widgets().reset([mainPanel, mapGrid]);
+  ui.root.setLayout(ui.Panel.Layout.Flow('horizontal'));
+  
+  // set up title
+  var title = ui.Label("Map Comparison 🗺️");
+  title.style().set(style.title);
+  
+  mainPanel.add(title); // add title to main panel
+  
+  var dropdownPanel = ui.Panel(); // panel to hold the drop-down boxes
+  dropdownPanel.style().set(style.dark_theme);
+  
+  // set up location input session (dropdowns for admin0, admin1 and admin2 names)
+  // disable admin selections
+  var admin0Select = ui.Select({
+      placeholder: 'Please wait..',
+    }).setDisabled(true);
+  
+  dropdownPanel.add(admin0Select); // add country drop down
+  
+  // admin level for user selection for choropleth map display
+  var admin_dict = {
+    "Admin 1 Level": ADM1,
+    "Admin 2 Level": ADM2
+  };
+
+  var adminLevelSelect = ui.Select({
+      placeholder: 'Select admin level ...',
+      items: Object.keys(admin_dict),
+    });
+  
+  dropdownPanel.add(adminLevelSelect); // add country drop down
+  
+  // select variable 1 (left map)
+  var var1_selection = ui.Select({
+    placeholder: 'Select data layer 1...',
+    items: Object.keys(layer_dict),
+  });
+  
+  var var2_selection = ui.Select({
+    placeholder: 'Select data layer 2...',
+    items: Object.keys(layer_dict),
+  });
+  
+  dropdownPanel.add(var1_selection); 
+  dropdownPanel.add(var2_selection); 
+  
+  // add drop down to side bar
+  mainPanel.add(dropdownPanel); // display on main panel
+  
+  // start computing button to pass arguments to calculation
+  var start_button = ui.Button({
+    label: "Start Computing",
+    onClick: computeMap
+  });
+  
+  start_button.style().set(style.start_button);
+  mainPanel.add(start_button);
+  
+  var loading_button = ui.Label("⌛ Processing takes up to 1-2 min", style.dark_theme);
+  loading_button.style().set({color:"#FFFFFF75"});
+  mainPanel.add(loading_button);
+  
+  var resultPanel = ui.Panel();
+  resultPanel.style().set(style.dark_theme);
+  
+  mainPanel.add(resultPanel);
+  
+  // center maps
+  map1.setCenter(70,30,5);
+  map2.setCenter(70,30,5);
+  
+  // Update from country selection
+  // function after selection: zoom to country; no computation yet
+  // var admin0Selected = function(admin0Selection) {};
+  // admin0Select.onChange(admin0Selected); // set up response for drop down
+  
+  // Get all country names and sort them
+  var admin0Names = ADM0.aggregate_array('shapeName').sort().distinct();
+  
+  // Fetch the value using evaluate() to not block the UI
+  admin0Names.evaluate(function(items){
+    admin0Select.items().reset(items);
+    admin0Select.setDisabled(false); // enable menu
+    admin0Select.setPlaceholder('Select country'); // Change placeholder
+  });
+  
+  // Get value from drop down and use it to compute layers for aoi
+  function computeMap(value) {
+    
+    // waitPanel.widgets().reset([waitMessage]);
+    // loading_button.style().set({shown: true});
+    var admin_level = adminLevelSelect.getValue(); // get selected country
+    var ds = admin_dict[admin_level]; // dataset for the selected admin level
+    
+    var country_name = admin0Select.getValue(); // get selected country
+    map1.clear(); // clear map
+    map2.clear();
+    
+    var selectedAdmin0 = ADM0.filter(
+      ee.Filter.eq('shapeName', country_name)
+      );
+    map1.centerObject(selectedAdmin0,5); // center country
+    
+    // customized basemap to enhance visuals
+    map1.setOptions(undefined, {'Custom': new_basemap});
+    map2.setOptions(undefined, {'Custom': new_basemap});
+    
+    // add data layer label
+    var var1 = var1_selection.getValue();
+    var var2 = var2_selection.getValue();
+    
+    // remove category label if applicable (only name of the dataset)
+    var var1_label = "👉 "+var1.replace(/.*(?=\|)/g, '').replace(/[|]/g,"").replace(/^\s/g,"");
+    var var2_label = "👉 "+var2.replace(/.*(?=\|)/g, '').replace(/[|]/g,"").replace(/^\s/g,"");
+    
+    // use layer selection to control displayed labels
+    helper.add_popup(var1_label, info_dict[var1], map1, url_dict[var1]);
+    helper.add_popup(var2_label, info_dict[var2], map2, url_dict[var2]);
+    
+    // use country name to compute aoi geometry
+    var selectedAdmin0 = ADM0.filter(ee.Filter.eq('shapeName', country_name));
+    var shapeGroup = ee.Feature(selectedAdmin0.first()).get('shapeGroup');
+    
+    // get details at the admin 2 level
+    var aoi = ds.filter(ee.Filter.eq('shapeGroup', shapeGroup));
+    // var aoi = ADM2.filter(ee.Filter.eq('shapeGroup', shapeGroup));
+    
+    // ger layer based on user selection, call aoi to get regional raster only
+    var layer1 = layer_dict[var1](aoi);
+    var layer2 = layer_dict[var2](aoi);
+    
+    // do chart
+    var chart = helper.chart_climate_var(aoi, layer1, layer2, var1_label, var2_label);
+
+    // in case no missing chart (caused by invalid layers), display chart
+    if (chart < 1) {
+      var noChart = ui.Label(
+        "Invalid data layer(s) found. Please make sure both layers are valid for charting.", 
+        style.dark_theme
+        );
+      noChart.style().set({color:"#FFFFFF"});
+      
+      resultPanel.widgets().reset([noChart]);
+    } else {
+      resultPanel.widgets().reset([chart]);
+    }
+    
+    // get choropleth maps for both maps
+    // vector, raster, map, reducer, log, output_name, legend_text
+    helper.zonalInspect(aoi, layer1, map1, "mean", log_dict[var1], var1, legend_dict[var1], color_dict[var1]);
+    helper.zonalInspect(aoi, layer2, map2, "mean", log_dict[var2], var2, legend_dict[var2], color_dict[var2]); 
+    
+    // set map control
+    map1.setControlVisibility(mapControl);
+    map2.setControlVisibility(mapControl);
+    map2.setControlVisibility({zoomControl: false});
+  }
+  
+  var p1_heading = "      Welcome! 👋";
+  var p2_heading = "      Welcome! 👋";
+  var p3_heading = "      Welcome! 👋";
+  
+  var p1_message = "Want to retrieve high-resolution climate\n\
+  risk data from space? This climate hazard\n\
+  tool enables layer downloads and further \n\
+  GIS analysis in no time!";
+  
+  var p2_message = "To begin with, select a country\n\
+  and two data layers which you\n\
+  would like to compare side to side.\n\
+  You could either compare among admin 1\n\
+  or admin 2 regions. Click start to\n\
+  compute and wait for a minute \n\
+  for the layers to load on-the-fly.\n\
+  You could download the derived table\n\
+  in csv by clicking on small icon located\n\
+  at the top-right corner of the chart.";
+  
+  var p3_message = "Click layer label to view details\n\
+  of the dataset, including the project website.\n\
+  Let's get started!";
+  
+  function addInstruction() {helper.addThreePage(
+    p1_heading, p1_message,
+    p2_heading, p2_message,
+    p3_heading, p3_message,
+    map1
+    )}
+  
+  addInstruction();
+};
+
+
+
+
+
+
+
+

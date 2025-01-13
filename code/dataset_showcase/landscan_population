@@ -1,0 +1,175 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var landscan_global = ee.ImageCollection("projects/sat-io/open-datasets/ORNL/LANDSCAN_GLOBAL");
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▄▀
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄           COPY THIS URL LINK TO PLAY AROUND WITH THE CODE              ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄  https://code.earthengine.google.com/30e1c1f66bf7938a8cbd200bb10dca56  ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀
+
+
+
+// ######################################### //
+// ######    Landscan Population      ###### //
+// ######################################### //
+
+/**
+ * This is an example script for visualizing dataset from awesome gee commmunity
+ * on Landscan population count. It is a gridded raster data layer based on 
+ * rapid, large-scale detection of human settlements from high resolution imagery.
+ * The data layer has high scientific confidence compared to other available datasets.
+ * 
+ * This script produce visualization for an area of interest (i.e. Pakistan in this example).
+ * 
+ * Dataset Source:
+ * Sims, K., Reith, A., Bright, E., McKee, J., & Rose, A. (2022). LandScan Global 2021 [Data set]. Oak Ridge National Laboratory. 
+ * https://doi.org/10.48690/1527702
+ * 
+ * Project Details:
+ * https://gee-community-catalog.org/projects/landscan/
+ * 
+ */
+ 
+// import modules 
+var palettes = require('users/gena/packages:palettes');
+var analysis = require('users/pinkychow1010/WB_IntraUrban:analysis_utils');
+
+// population legend layout
+var popcount_intervals =
+'<RasterSymbolizer>' +
+' <ColorMap type="intervals" extended="false" >' +
+    '<ColorMapEntry color="#CCCCCC" quantity="0" label="No Data"/>' +
+    '<ColorMapEntry color="#FFFFBE" quantity="5" label="Population Count (Estimate)"/>' +
+    '<ColorMapEntry color="#FEFF73" quantity="25" label="Population Count (Estimate)"/>' +
+    '<ColorMapEntry color="#FEFF2C" quantity="50" label="Population Count (Estimate)"/>' +
+    '<ColorMapEntry color="#FFAA27" quantity="100" label="Population Count (Estimate)"/>' +
+    '<ColorMapEntry color="#FF6625" quantity="500" label="Population Count (Estimate)"/>' +
+    '<ColorMapEntry color="#FF0023" quantity="2500" label="Population Count (Estimate)"/>' +
+    '<ColorMapEntry color="#CC001A" quantity="5000" label="Population Count (Estimate)"/>' +
+    '<ColorMapEntry color="#730009" quantity="185000" label="Population Count (Estimate)"/>' +
+  '</ColorMap>' +
+'</RasterSymbolizer>';
+
+// Define a dictionary which will be used to make legend and 
+// visualize image on map
+var dict = {
+  "names": [
+    "0",
+    "1-5",
+    "6-25",
+    "26-50",
+    "51-100",
+    "101-500",
+    "501-2500",
+    "2501-5000",
+    "5001-185000"
+  ],
+  "colors": [
+    "#CCCCCC",
+    "#FFFFBE",
+    "#FEFF73",
+    "#FEFF2C",
+    "#FFAA27",
+    "#FF6625",
+    "#FF0023",
+    "#CC001A",
+    "#730009"
+  ]};
+  
+// create a panel to hold the legend widget
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-left',
+    padding: '8px 15px'
+  }
+});
+
+// call function for legend
+addCategoricalLegend(legend, dict, 'Population Count(estimate)');
+
+// get landscan 2000 and 2021
+var landscan_2000 = landscan_global.sort('system:time_start').first().sldStyle(popcount_intervals);
+var landscan_2021 = landscan_global.sort('system:time_start',false).first().sldStyle(popcount_intervals);
+
+// get area of interest: Pakistan
+var ADM2 = ee.FeatureCollection('projects/earthengine-legacy/assets/projects/sat-io/open-datasets/geoboundaries/CGAZ_ADM2');
+var pakistan = ADM2.filter(ee.Filter.eq('shapeGroup', 'PAK'));
+
+Map.centerObject(pakistan, 6);
+
+// display raster layers
+Map.addLayer(landscan_2000.clip(pakistan), {}, 'Pakistan Population Count 2000');
+Map.addLayer(landscan_2021.clip(pakistan), {}, 'Pakistan Population Count 2021');
+
+// customized basemap to enhance visuals 
+var basemap = require('users/pinkychow1010/WB_IntraUrban:basemap_resources'); 
+basemap.addCustomBasemap('simpleLight');
+
+// add title label
+Map.add(ui.Label('Landscan Population in Pakistan (2021)', 
+{
+  position: 'top-center', 
+  fontSize: '30px',
+  backgroundColor: '#0047AB',
+  fontWeight: '500',
+  color: 'white'
+}
+));
+
+
+// Function to generate the legend
+function addCategoricalLegend(panel, dict, title) {
+  
+  // Create and add the legend title.
+  var legendTitle = ui.Label({
+    value: title,
+    style: {
+      fontWeight: 'bold',
+      fontSize: '18px',
+      margin: '0 0 4px 0',
+      padding: '0'
+    }
+  });
+  panel.add(legendTitle);
+  
+  var loading = ui.Label('Loading legend...', {margin: '2px 0 4px 0'});
+  panel.add(loading);
+  
+  // Creates and styles 1 row of the legend.
+  var makeRow = function(color, name) {
+    // Create the label that is actually the colored box.
+    var colorBox = ui.Label({
+      style: {
+        backgroundColor: color,
+        // Use padding to give the box height and width.
+        padding: '8px',
+        margin: '0 0 4px 0'
+      }
+    });
+  
+    // Create the label filled with the description text.
+    var description = ui.Label({
+      value: name,
+      style: {margin: '0 0 4px 6px'}
+    });
+  
+    return ui.Panel({
+      widgets: [colorBox, description],
+      layout: ui.Panel.Layout.Flow('horizontal')
+    });
+  };
+  
+  // Get the list of palette colors and class names from the image.
+  var palette = dict['colors'];
+  var names = dict['names'];
+  loading.style().set('shown', false);
+  
+  for (var i = 0; i < names.length; i++) {
+    panel.add(makeRow(palette[i], names[i]));
+  }
+  
+  Map.add(panel);
+}
+

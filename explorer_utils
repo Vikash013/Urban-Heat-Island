@@ -1,0 +1,1273 @@
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ################################################## //
+// ### World Bank Intra-Urban Data Explorer Tool #### //
+// ################################################## //
+
+// This script provides export functions for all available layers,
+// summarized in layer_dict dict
+
+// It is used to download multiple regional rasters in customised resolution
+// to facilitate EO-based intra-urban analysis
+
+// import module
+var basemap = require('users/pinkychow1010/WB_IntraUrban:basemap_resources');
+var palettes = require('users/gena/packages:palettes');
+var helper = require('users/pinkychow1010/WB_IntraUrban:helper'); // utils functions
+var text = require('users/pinkychow1010/WB_IntraUrban:data_text');
+
+//###############################//
+//##                           ##//
+//##       CONFIGURATIONS      ##//
+//##                           ##//
+//###############################//
+
+
+// descriptions for data layers
+exports.info_dict = {
+  'EXPOSURE | Land Use Cover': text.worldcover,
+  'EXPOSURE | Population Count': text.ghsl,
+  'EXPOSURE | Urban Density': text.urban,
+  'EXPOSURE | Urbanization Degree': text.ghsl,
+  'EXPOSURE | Landscan Population': text.landscan,
+  'EXPOSURE | Enhanced Vegetation Index': text.evi,
+  'EXPOSURE | Vegetation Continuous Fields': text.vcf,
+  'HAZARD | Summer Day Temperature': text.modis,
+  'HAZARD | Summer Night Temperature': text.modis,
+  'HAZARD | Palmer Drought Severity Index': text.pdsi,
+  'HAZARD | Urban Heat Island Day': text.uhi,
+  'HAZARD | Urban Heat Island Night': text.uhi,
+  'HAZARD | Apparent Temperature Mean': text.hitisae,
+  'HAZARD | Apparent Temperature Min': text.hitisae,
+  'HAZARD | Apparent Temperature Max': text.hitisae,
+  'HAZARD | Mean Radiant Temperature Mean': text.hitisae,
+  'HAZARD | Mean Radiant Temperature Min': text.hitisae,
+  'HAZARD | Mean Radiant Temperature Max': text.hitisae,
+  'HAZARD | Wet Bulb Temperature Mean': text.hitisae,
+  'HAZARD | Wet Bulb Temperature Min': text.hitisae,
+  'HAZARD | Wet Bulb Temperature Max': text.hitisae,
+  'HAZARD | Wet Bulb Globe Temperature Mean': text.hitisae,
+  'HAZARD | Wet Bulb Globe Temperature Min': text.hitisae,
+  'HAZARD | Wet Bulb Globe Temperature Max': text.hitisae,
+  'HAZARD | Land Surface Temperature': text.lst,
+  'HAZARD | Keetch-Byram Drought Index': text.kbdi,
+  'VULNERABILITY | Relative Wealth Index': text.rwi,
+  'VULNERABILITY | Critical Infrastructure Index': text.cisi
+};
+
+
+// project url link for data layers
+exports.url_dict = {
+  'EXPOSURE | Land Use Cover': "https://esa-worldcover.org/en",
+  'EXPOSURE | Population Count': "https://ghsl.jrc.ec.europa.eu/ghs_pop.php",
+  'EXPOSURE | Urban Density': "https://esa-worldcover.org/en",
+  'EXPOSURE | Urbanization Degree': "https://ghsl.jrc.ec.europa.eu/ghs_smod2023.php",
+  'EXPOSURE | Landscan Population': "https://sdi.eea.europa.eu/catalogue/srv/api/records/39e6a1fb-5217-4e22-ab2e-68d50d11faeb",
+  'EXPOSURE | Enhanced Vegetation Index': "https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD13Q1",
+  'EXPOSURE | Vegetation Continuous Fields': 'https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MOD44B',
+  'HAZARD | Summer Day Temperature': "https://modis.gsfc.nasa.gov/data/dataprod/mod11.php",
+  'HAZARD | Summer Night Temperature': "https://modis.gsfc.nasa.gov/data/dataprod/mod11.php",
+  'HAZARD | Palmer Drought Severity Index': "https://www.climatologylab.org/terraclimate.html",
+  'HAZARD | Urban Heat Island Day': "https://yceo.yale.edu/research/global-surface-uhi-explorer",
+  'HAZARD | Urban Heat Island Night': "https://yceo.yale.edu/research/global-surface-uhi-explorer",
+  'HAZARD | Apparent Temperature Mean': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Apparent Temperature Min': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Apparent Temperature Max': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Mean Radiant Temperature Mean': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Mean Radiant Temperature Min': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Mean Radiant Temperature Max': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Wet Bulb Temperature Mean': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Wet Bulb Temperature Min': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Wet Bulb Temperature Max': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Wet Bulb Globe Temperature Mean': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Wet Bulb Globe Temperature Min': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Wet Bulb Globe Temperature Max': 'https://gee-community-catalog.org/projects/hitisae/',
+  'HAZARD | Land Surface Temperature': 'https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LC09_C02_T1_L2',
+  'HAZARD | Keetch-Byram Drought Index': 'https://developers.google.com/earth-engine/datasets/catalog/UTOKYO_WTLAB_KBDI_v1#description',
+  'VULNERABILITY | Relative Wealth Index': "https://dataforgood.facebook.com/dfg/tools/relative-wealth-index",
+  'VULNERABILITY | Critical Infrastructure Index': "https://www.nature.com/articles/s41597-022-01218-4"
+};
+
+
+// dictionary for default resolution
+exports.resolution_dict = {
+  'EXPOSURE | Land Use Cover': 10,
+  'EXPOSURE | Population Count': 38,
+  'EXPOSURE | Urban Density': 2000,
+  'EXPOSURE | Landscan Population': 1000,
+  'EXPOSURE | Urbanization Degree': 1000,
+  'EXPOSURE | Enhanced Vegetation Index': 250,
+  'EXPOSURE | Vegetation Continuous Fields': 250,
+  'HAZARD | Summer Day Temperature': 1000,
+  'HAZARD | Summer Night Temperature': 1000,
+  'HAZARD | Palmer Drought Severity Index': 2000,
+  'HAZARD | Urban Heat Island Day': 300,
+  'HAZARD | Urban Heat Island Night': 300,
+  'HAZARD | Apparent Temperature Mean': 2000,
+  'HAZARD | Apparent Temperature Min': 2000,
+  'HAZARD | Apparent Temperature Max': 2000,
+  'HAZARD | Mean Radiant Temperature Mean': 2000,
+  'HAZARD | Mean Radiant Temperature Min': 2000,
+  'HAZARD | Mean Radiant Temperature Max': 2000,
+  'HAZARD | Wet Bulb Temperature Mean': 2000,
+  'HAZARD | Wet Bulb Temperature Min': 2000,
+  'HAZARD | Wet Bulb Temperature Max': 2000,
+  'HAZARD | Wet Bulb Globe Temperature Mean': 2000,
+  'HAZARD | Wet Bulb Globe Temperature Min': 2000,
+  'HAZARD | Wet Bulb Globe Temperature Max': 2000,
+  'HAZARD | Land Surface Temperature': 30,
+  'HAZARD | Keetch-Byram Drought Index': 2000,
+  'VULNERABILITY | Relative Wealth Index': 2000,
+  'VULNERABILITY | Critical Infrastructure Index': 2000
+};
+
+// dictionary for filename definitions
+exports.filename_dict = {
+  'EXPOSURE | Land Use Cover': 'ESA-WorldCover-2020',
+  'EXPOSURE | Population Count': 'Population-GPW-2015',
+  'EXPOSURE | Urban Density': 'ESA-WorldCover-derived-urban-density',
+  'EXPOSURE | Landscan Population': 'Population-Landscan-2021',
+  'EXPOSURE | Urbanization Degree': 'GHSL-2015-urbanization-degree',
+  'EXPOSURE | Enhanced Vegetation Index': 'Enhanced-Vegetation-Index-2022-summer',
+  'EXPOSURE | Vegetation Continuous Fields': 'MODIS-Vegetation-Continuous-Fields-Current-Year',
+  'HAZARD | Summer Day Temperature': 'MODIS-LST-day',
+  'HAZARD | Summer Night Temperature': 'MODIS-LST-night',
+  'HAZARD | Palmer Drought Severity': 'PDSI-median-2010-to-2023',
+  'HAZARD | Urban Heat Island Day': 'Urban-Heat-Island-Day-Yale',
+  'HAZARD | Urban Heat Island Night': 'Urban-Heat-Island-Night-Yale',
+  'HAZARD | Apparent Temperature Mean': 'Apparent-Temperature-Mean',
+  'HAZARD | Apparent Temperature Min': 'Apparent-Temperature-Min',
+  'HAZARD | Apparent Temperature Max': 'Apparent-Temperature-Max',
+  'HAZARD | Mean Radiant Temperature Mean': 'Mean-Radiant-Temperature-Mean',
+  'HAZARD | Mean Radiant Temperature Min': 'Mean-Radiant-Temperature-Min',
+  'HAZARD | Mean Radiant Temperature Max': 'Mean-Radiant-Temperature-Max',
+  'HAZARD | Wet Bulb Temperature Mean': 'Wet-Bulb-Temperature-Mean',
+  'HAZARD | Wet Bulb Temperature Min': 'Wet-Bulb-Temperature-Min',
+  'HAZARD | Wet Bulb Temperature Max': 'Wet-Bulb-Temperature-Max',
+  'HAZARD | Wet Bulb Globe Temperature Mean': 'Wet-Bulb-Globe-Temperature-Mean',
+  'HAZARD | Wet Bulb Globe Temperature Min': 'Wet-Bulb-Globe-Temperature-Min',
+  'HAZARD | Wet Bulb Globe Temperature Max': 'Wet-Bulb-Globe-Temperature-Max',
+  'HAZARD | Land Surface Temperature': 'Land-Surface-Temperature-2022-Summer-Day',
+  'HAZARD | Keetch-Byram Drought Index': 'Latest-Keetch-Byram-Drought-Index',
+  'VULNERABILITY | Relative Wealth Index': 'Facebook-Relative-Wealth-Index',
+  'VULNERABILITY | Critical Infrastructure Index': 'Critical-Infrastructure-Spatial-Index'
+};
+
+// dictionary for resampling algorithms
+exports.reducer_dict = {
+  'EXPOSURE | Land Use Cover': ee.Reducer.mode(), // retain discrete class
+  'EXPOSURE | Population Count': ee.Reducer.sum(), // population count per pixel
+  'EXPOSURE | Urban Density': ee.Reducer.mean(), // ratio
+  'EXPOSURE | Landscan Population': ee.Reducer.sum(),
+  'EXPOSURE | Urbanization Degree': ee.Reducer.mean(),
+  'EXPOSURE | Enhanced Vegetation Index': ee.Reducer.median(),
+  'EXPOSURE | Vegetation Continuous Fields': ee.Reducer.median(),
+  'HAZARD | Summer Day Temperature': ee.Reducer.median(), // median to prevent influence from outliners
+  'HAZARD | Summer Night Temperature': ee.Reducer.median(), // median to prevent influence from outliners
+  'HAZARD | Palmer Drought Severity': ee.Reducer.mean(),
+  'HAZARD | Urban Heat Island Day': ee.Reducer.median(),
+  'HAZARD | Urban Heat Island Night': ee.Reducer.median(),
+  'HAZARD | Apparent Temperature Mean': ee.Reducer.mean(),
+  'HAZARD | Apparent Temperature Min': ee.Reducer.mean(),
+  'HAZARD | Apparent Temperature Max': ee.Reducer.mean(),
+  'HAZARD | Mean Radiant Temperature Mean': ee.Reducer.mean(),
+  'HAZARD | Mean Radiant Temperature Min': ee.Reducer.mean(),
+  'HAZARD | Mean Radiant Temperature Max': ee.Reducer.mean(),
+  'HAZARD | Wet Bulb Temperature Mean': ee.Reducer.mean(),
+  'HAZARD | Wet Bulb Temperature Min': ee.Reducer.mean(),
+  'HAZARD | Wet Bulb Temperature Max': ee.Reducer.mean(),
+  'HAZARD | Wet Bulb Globe Temperature Mean': ee.Reducer.mean(),
+  'HAZARD | Wet Bulb Globe Temperature Min': ee.Reducer.mean(),
+  'HAZARD | Wet Bulb Globe Temperature Max': ee.Reducer.mean(),
+  'HAZARD | Land Surface Temperature': ee.Reducer.median(),
+  'HAZARD | Keetch-Byram Drought Index': ee.Reducer.median(),
+  'VULNERABILITY | Relative Wealth Index': ee.Reducer.median(),
+  'VULNERABILITY | Critical Infrastructure Index': ee.Reducer.mean()
+};
+
+// dictionary for action labels and corresponding functions (call map layer display + return layer for export)
+exports.layer_dict = {
+  'EXPOSURE | Land Use Cover': export_landuse,
+  'EXPOSURE | Population Count': export_population,
+  'EXPOSURE | Urban Density': export_urban_density,
+  'EXPOSURE | Landscan Population': export_landscan_pop,
+  'EXPOSURE | Urbanization Degree': export_urban_degree,
+  'EXPOSURE | Enhanced Vegetation Index': export_evi,
+  'EXPOSURE | Vegetation Continuous Fields': export_vcf,
+  'HAZARD | Summer Day Temperature': export_summer_lst,
+  'HAZARD | Summer Night Temperature': export_summer_lst_night,
+  'HAZARD | Palmer Drought Severity': export_pdsi,
+  'HAZARD | Urban Heat Island Day': export_uhi_day,
+  'HAZARD | Urban Heat Island Night': export_uhi_night,
+  'HAZARD | Apparent Temperature Mean': export_AT_mean,
+  'HAZARD | Apparent Temperature Min': export_AT_min,
+  'HAZARD | Apparent Temperature Max': export_AT_max,
+  'HAZARD | Mean Radiant Temperature Mean': export_MRT_mean,
+  'HAZARD | Mean Radiant Temperature Min': export_MRT_min,
+  'HAZARD | Mean Radiant Temperature Max': export_MRT_max,
+  'HAZARD | Wet Bulb Temperature Mean': export_WBT_mean,
+  'HAZARD | Wet Bulb Temperature Min': export_WBT_min,
+  'HAZARD | Wet Bulb Temperature Max': export_WBT_max,
+  'HAZARD | Wet Bulb Globe Temperature Mean': export_WBGT_mean,
+  'HAZARD | Wet Bulb Globe Temperature Min': export_WBGT_min,
+  'HAZARD | Wet Bulb Globe Temperature Max': export_WBGT_max,
+  'HAZARD | Land Surface Temperature': export_l8_st,
+  'HAZARD | Keetch-Byram Drought Index': export_kbdi,
+  'VULNERABILITY | Relative Wealth Index': export_rwi,
+  'VULNERABILITY | Critical Infrastructure Index': export_cisi
+};
+
+
+//###############################//
+//##                           ##//
+//##     EXPORT FUNCTIONS      ##//
+//##                           ##//
+//###############################//
+
+// *** Layout ***
+// Name of Data Layer
+// function export_name(aoi) { // function name export_*
+//   var layer = ee.Image("data-layer").clip(aoi); // regional raster image (not collection)
+  
+//   // predefined visualization params
+//   var vis = {min:minVal, max:maxVal, palette:['#000004','#57106e','#bc3754','#f98e09','#fcffa4']}; //inferno
+//   Map.addLayer(layer, vis, "Index"); // add layer to map
+  
+//   var legend = helper.add_colorbar(vis, "Index");
+//   Map.add(legend); // always add legend
+//   Map.centerObject(aoi, 8); // always center object
+  
+//   return layer; // return image for user export
+// }
+
+// Keetch-Byram Drought Index (KBDI)
+function export_kbdi(aoi) {
+  var layer = ee.ImageCollection('UTOKYO/WTLAB/KBDI/v1')
+  .select('KBDI')
+  .limit(1, 'system:time_start', false)
+  .first()
+  .clip(aoi); // latest image for kbdi drought index
+  
+  layer = layer.rename(
+  'KBDI_'+layer.get('system:index').getInfo()
+  );
+  
+  var vis = {
+    min: 0,
+    max: 800,
+    palette: [
+      '001a4d', '003cb3', '80aaff', '336600', 
+      'cccc00', 'cc9900', 'cc6600', '660033'
+    ]
+  };
+  Map.addLayer(layer, vis, "Index");
+  
+  var legend = helper.add_colorbar(vis, "Index");
+  Map.add(legend);
+  Map.centerObject(aoi, 8);
+  
+  return layer;
+}
+
+// Landsat 8 Surface Temperature
+function export_l8_st(aoi) {
+  var yearFilter = ee.Filter.date(ee.Date("2022-01-01"), ee.Date("2023-01-01"));
+  var summerFilter = helper.get_summer(aoi);
+  
+  var landsat = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+    .map(maskL8sr)
+    .filter(yearFilter)
+    .filter(summerFilter)
+    .filter(ee.Filter.lt('CLOUD_COVER', 30))
+    .median()
+    .clip(aoi);
+
+  var b10 = landsat.select(['ST_B10'])
+  .multiply(0.00341802).add(149)
+  .subtract(273.15)
+  .rename('LST');
+  
+  // predefined visualization params
+  var max = b10.reduceRegion({
+    reducer: ee.Reducer.max(),
+    geometry: aoi.geometry(),
+    crs: 'EPSG:4326',
+    scale: 1000,
+    maxPixels: 1e9
+  }).get('LST').getInfo();
+  
+  var min = b10.reduceRegion({
+    reducer: ee.Reducer.min(),
+    geometry: aoi.geometry(),
+    crs: 'EPSG:4326',
+    scale: 1000,
+    maxPixels: 1e9
+  }).get('LST').getInfo();
+  
+  var vis = {min:min, max:max, palette:['#000004','#57106e','#bc3754','#f98e09','#fcffa4']}; //inferno
+  Map.addLayer(b10, vis, "Landsat 8 median LST (summer 2022)"); // add layer to map
+  
+  var legend = helper.add_colorbar(vis, "Celsius");
+  Map.add(legend);
+  Map.centerObject(aoi, 8);
+  
+  return b10;
+}
+
+function maskL8sr(col) {
+  // #################################
+  // ###  Landsat 8 cloud mask   #####
+  // #################################
+  
+  // Bits 3 and 5 are cloud shadow and cloud, respectively.
+  var cloudShadowBitMask = (1 << 3);
+  var cloudsBitMask = (1 << 5);
+  
+  // Get the pixel QA band.
+  var qa = col.select("QA_PIXEL");
+  
+  // Both flags should be set to zero, indicating clear conditions.
+  var mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0)
+                 .and(qa.bitwiseAnd(cloudsBitMask).eq(0));
+  return col.updateMask(mask);
+}
+
+
+// Terra MODIS Vegetation Continuous Fields (VCF) product
+function export_vcf(aoi) { // function name export_*
+  // import dataset
+  var dataset = ee.ImageCollection('MODIS/006/MOD44B')
+    .limit(1, 'system:time_start', false).first()
+    .clip(aoi).select('Percent_NonVegetated');
+  
+  // set up visualization params
+  var vis = {
+    min: 10.0,
+    max: 100.0,
+    palette: ['074b03', '0a9501', 'bbe029', 'yellow', 'red']
+  };
+  
+  Map.centerObject(dataset, 8);
+  Map.addLayer(dataset, vis, "%"); // add layer to map
+  
+  var legend = helper.add_colorbar(vis, "Index");
+  Map.add(legend);
+  Map.centerObject(aoi, 8);
+  
+  return dataset.int8();
+}
+
+
+// Enhanced Vegetation Index (EVI)
+function export_evi(aoi) {
+  
+  var summer = helper.get_summer(aoi);
+  var dataset = ee.ImageCollection('MODIS/061/MOD13Q1')
+    .filter(summer)
+    .filter(ee.Filter.date('2022-01-01', '2023-01-01'))
+    .median()
+    .multiply(0.0001)
+    .clip(aoi);
+  
+  var evi = dataset.select('EVI');
+  var eviVis = {
+    min: 0.0,
+    max: 0.5,
+    palette: [
+      'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+      '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+      '012E01', '011D01', '011301'
+    ],
+  };
+  
+  Map.addLayer(evi, eviVis, "Enhanced Vegetation Index");
+  
+  var legend = helper.add_colorbar(eviVis, "Index");
+  Map.add(legend);
+  Map.centerObject(aoi, 8);
+  
+  return evi;
+}
+
+// WBT
+function export_WBT_mean(aoi) {
+  var img = get_thermal_idx(aoi, "WBT", "mean");
+  return img;
+}
+
+function export_WBT_min(aoi) {
+  var img = get_thermal_idx(aoi, "WBT", "min");
+  return img;
+}
+
+function export_WBT_max(aoi) {
+  var img = get_thermal_idx(aoi, "WBT", "max");
+  return img;
+}
+
+// WBGT
+function export_WBGT_mean(aoi) {
+  var img = get_thermal_idx(aoi, "WBGT", "mean");
+  return img;
+}
+
+function export_WBGT_min(aoi) {
+  var img = get_thermal_idx(aoi, "WBGT", "min");
+  return img;
+}
+
+function export_WBGT_max(aoi) {
+  var img = get_thermal_idx(aoi, "WBGT", "max");
+  return img;
+}
+
+// UTCI
+function export_UTCI_mean(aoi) {
+  var img = get_thermal_idx(aoi, "UTCI", "mean");
+  return img;
+}
+
+function export_UTCI_min(aoi) {
+  var img = get_thermal_idx(aoi, "UTCI", "min");
+  return img;
+}
+
+function export_UTCI_max(aoi) {
+  var img = get_thermal_idx(aoi, "UTCI", "max");
+  return img;
+}
+
+// AT
+function export_AT_mean(aoi) {
+  var img = get_thermal_idx(aoi, "AT", "mean");
+  return img;
+}
+
+function export_AT_min(aoi) {
+  var img = get_thermal_idx(aoi, "AT", "min");
+  return img;
+}
+
+function export_AT_max(aoi) {
+  var img = get_thermal_idx(aoi, "AT", "max");
+  return img;
+}
+
+// MRT
+function export_MRT_mean(aoi) {
+  var img = get_thermal_idx(aoi, "MRT", "mean");
+  return img;
+}
+
+function export_MRT_min(aoi) {
+  var img = get_thermal_idx(aoi, "MRT", "min");
+  return img;
+}
+
+function export_MRT_max(aoi) {
+  var img = get_thermal_idx(aoi, "MRT", "max");
+  return img;
+}
+
+// ESI
+function export_ESI_mean(aoi) {
+  var img = get_thermal_idx(aoi, "ESI", "mean");
+  return img;
+}
+
+function export_ESI_min(aoi) {
+  var img = get_thermal_idx(aoi, "ESI", "min");
+  return img;
+}
+
+function export_ESI_max(aoi) {
+  var img = get_thermal_idx(aoi, "ESI", "max");
+  return img;
+}
+
+// generic function for extracting thermal index data
+function get_thermal_idx(aoi, index, stat){
+  
+  // B1: Min, B2: Mean and B3: Maximum
+  var band_dict = {
+    "min": "b1",
+    "mean": "b2",
+    "max": "b3"
+  };
+  
+  // names for index
+  var idx_dict = {
+    "AT": "Apparent Temperature (AT)",
+    "ESI": "Environment Stress Index (ESI)",
+    "MRT": "Mean Radiant Temperature (MRT)",
+    "UTCI": "Universal Thermal Climate Index (UTCI)",
+    "UTCI2": "UTCI for indoor environment",
+    "UTCI3": "UTCI for outdoor shaded space",
+    "HI": "Heat Index (HI)",
+    "Humidex": "Humidity Index (Humidex)",
+    "WBGT": "Wet-bulb Globe Temperature (WBGT)",
+    "WBT": "Wet Bulb Temperature (WBT)",
+    "WCT": "Wind Chill Temperature (WCCT)",
+    "NET": "Net Effective Temperature (NET)"
+  };
+  
+  var ds = ee.ImageCollection("projects/sat-io/open-datasets/HITISEA/"+index);
+  var img = ds
+  .filter(ee.Filter.date(ee.Date('2015-06-01'), ee.Date('2019-10-01')))
+  .filter(ee.Filter.calendarRange(6, 9, 'month'))
+  .select(band_dict[stat])
+  .limit(1, 'system:time_start', false).median().clip(aoi); // summer mean between 2015 to 2019
+  
+  var max = img.reduceRegion({
+    reducer: ee.Reducer.max(),
+    geometry: aoi.geometry(),
+    crs: 'EPSG:4326',
+    scale: 1000,
+    maxPixels: 1e9
+  }).get(band_dict[stat]).getInfo();
+  
+  var min = img.reduceRegion({
+    reducer: ee.Reducer.min(),
+    geometry: aoi.geometry(),
+    crs: 'EPSG:4326',
+    scale: 1000,
+    maxPixels: 1e9
+  }).get(band_dict[stat]).getInfo();
+  
+  var vis = {min:min, max:max, palette:['#000004','#57106e','#bc3754','#f98e09','#fcffa4']}; //inferno
+  Map.addLayer(img, vis, idx_dict[index]);
+  
+  var legend = helper.add_colorbar(vis, index);
+  Map.add(legend);
+  Map.centerObject(aoi, 8);
+
+  return img;
+}
+
+
+// Critical Infrastructure Spatial Index
+function export_cisi(aoi) {
+  var cisi = ee.Image("projects/sat-io/open-datasets/CISI/global_CISI").clip(aoi);
+  
+  var vis = {min:0, max:0.2, palette:['#000004','#57106e','#bc3754','#f98e09','#fcffa4']}; //inferno
+  Map.addLayer(cisi, vis, "Critical Infrastructure Spatial Index");
+  
+  var legend = helper.add_colorbar(vis, "Index");
+  Map.add(legend);
+  
+  Map.centerObject(aoi, 8);
+  return cisi;
+}
+
+// Urban Heat Island Index Summer Days (Yale)
+function export_uhi_day(aoi) {
+  var uhi = ee.ImageCollection('YALE/YCEO/UHI/Summer_UHI_yearly_pixel/v4')
+  .select('Daytime')
+  .filter(ee.Filter.inList('system:index', ["2018"]))
+  .first();
+  
+  var vis = {min:-4, max:6, palette:['#000004','#57106e','#bc3754','#f98e09','#fcffa4']}; //inferno
+  Map.addLayer(uhi.clip(aoi), vis, "UHI Summer Days");
+  
+  var legend = helper.add_colorbar(vis, "Index");
+  Map.add(legend);
+  
+  Map.centerObject(aoi, 8);
+  return uhi.clip(aoi);
+}
+
+
+// Urban Heat Island Index Summer Nights (Yale)
+function export_uhi_night(aoi) {
+  var uhi = ee.ImageCollection('YALE/YCEO/UHI/Summer_UHI_yearly_pixel/v4')
+  .select('Nighttime')
+  .filter(ee.Filter.inList('system:index', ["2018"]))
+  .first();
+  
+  var vis = {min:-4, max:6, palette:['#000004','#57106e','#bc3754','#f98e09','#fcffa4']}; //inferno
+  Map.addLayer(uhi.clip(aoi), vis, "UHI Summer Nights");
+  
+  var legend = helper.add_colorbar(vis, "Index");
+  Map.add(legend);
+  
+  Map.centerObject(aoi, 8);
+  return uhi.clip(aoi);
+}
+
+
+// Relative Wealth Index (Facebook)
+function export_rwi(aoi) {
+  var rwi = ee.FeatureCollection("projects/sat-io/open-datasets/facebook/relative_wealth_index");
+
+  var aoi_rwi = rwi.filterBounds(aoi).map(
+    function(point) {
+    return point.buffer(2000);
+  });
+  
+  var rwi_raster = aoi_rwi.filter(ee.Filter.notNull(['rwi']))
+    .reduceToImage({
+      properties: ['rwi'],
+      reducer: ee.Reducer.mean(),
+  })
+  .clip(aoi)
+  .setDefaultProjection('EPSG: 4326'); // debug rwi export issues: https://developers.google.com/earth-engine/apidocs/ee-featurecollection-reducetoimage
+  
+  // display layer
+  var vis = {min: -1, max: 1.5, palette: ['red','orange','yellow','green','blue']};
+  Map.addLayer(rwi_raster, vis,  "Relative Wealth Index (facebook)");
+  
+  // add legend to raster layer
+  var legend = helper.add_colorbar(vis, "Index");
+  Map.add(legend);
+  Map.centerObject(aoi, 5);
+  
+  return rwi_raster;
+}
+
+
+
+// Urbanization Degree GHSL
+function export_urban_degree(aoi) {
+  var dataset = ee.ImageCollection('JRC/GHSL/P2016/SMOD_POP_GLOBE_V1')
+                  .filter(ee.Filter.date('2015-01-01', '2015-12-31'));
+  var degreeOfUrbanization = dataset.select('smod_code').sum().clip(aoi);
+  
+  var vis = {
+    min: 0.0,
+    max: 3.0,
+    palette: ['#ffd700','#ffb51e','#e36c18','#a22922']
+  };
+  
+  // display layer
+  Map.addLayer(degreeOfUrbanization, vis, 'Degree of Urbanization GHSL 2015');
+  Map.centerObject(aoi, 8);
+  
+  // add legend to raster layer
+  var legend = helper.add_colorbar(vis, "Degree");
+  Map.add(legend);
+  
+  var ref = ee.ImageCollection('JRC/GHSL/P2016/SMOD_POP_GLOBE_V1').first().projection();
+
+  return degreeOfUrbanization.setDefaultProjection(ref);
+}
+
+
+
+// Palmer Drought Severity Index 
+function export_pdsi(aoi) {
+  // return the list of coordinates
+  var centroid = aoi.first().geometry().centroid();
+  var listCoords = ee.Array.cat(centroid.coordinates(), 0); 
+  
+  var yCoords = ee.List(listCoords).getInfo()[1];
+  var south = ee.Number(yCoords).lt(0);
+  
+  var shift = south.multiply(6).getInfo();
+  
+  var summerFilter = ee.Filter.calendarRange(5+shift, 9+shift, "month");
+  
+  var yearFilter = ee.Filter.date(ee.Date("2010-01-01"),ee.Date("2023-01-01"));
+  
+  var dataset = ee.ImageCollection('IDAHO_EPSCOR/TERRACLIMATE')
+                    .filter(yearFilter).filter(summerFilter);
+  
+  var drought_index = dataset.select('pdsi').median().multiply(0.01).clip(aoi);
+  
+  var vis = {
+    min: -4.0,
+    max: 5.0,
+    palette: ['red','yellow','green','blue'],
+  };
+  
+  // display layer
+  Map.addLayer(drought_index, vis, 'PDSI long-term median (2010-2023)');
+  Map.centerObject(aoi, 8);
+  
+  // add legend to raster layer
+  var legend = helper.add_colorbar(vis, "PDSI");
+  Map.add(legend);
+  
+  var ref = ee.ImageCollection('IDAHO_EPSCOR/TERRACLIMATE').first().projection();
+  
+  return drought_index.setDefaultProjection(ref);
+}
+
+// Landscan population estimate HD 2021
+function export_landscan_pop(aoi) {
+  var popcount_intervals =
+  '<RasterSymbolizer>' +
+  ' <ColorMap type="intervals" extended="false" >' +
+      '<ColorMapEntry color="#CCCCCC" quantity="0" label="No Data"/>' +
+      '<ColorMapEntry color="#FFFFBE" quantity="5" label="Population Count (Estimate)"/>' +
+      '<ColorMapEntry color="#FEFF73" quantity="25" label="Population Count (Estimate)"/>' +
+      '<ColorMapEntry color="#FEFF2C" quantity="50" label="Population Count (Estimate)"/>' +
+      '<ColorMapEntry color="#FFAA27" quantity="100" label="Population Count (Estimate)"/>' +
+      '<ColorMapEntry color="#FF6625" quantity="500" label="Population Count (Estimate)"/>' +
+      '<ColorMapEntry color="#FF0023" quantity="2500" label="Population Count (Estimate)"/>' +
+      '<ColorMapEntry color="#CC001A" quantity="5000" label="Population Count (Estimate)"/>' +
+      '<ColorMapEntry color="#730009" quantity="185000" label="Population Count (Estimate)"/>' +
+    '</ColorMap>' +
+  '</RasterSymbolizer>';
+  
+  // Define a dictionary which will be used to make legend and visualize image on map
+  var dict = {
+    "names": [
+      "0",
+      "1-5",
+      "6-25",
+      "26-50",
+      "51-100",
+      "101-500",
+      "501-2500",
+      "2501-5000",
+      "5001-185000"
+    ],
+    "colors": [
+      "#CCCCCC",
+      "#FFFFBE",
+      "#FEFF73",
+      "#FEFF2C",
+      "#FFAA27",
+      "#FF6625",
+      "#FF0023",
+      "#CC001A",
+      "#730009"
+    ]};
+    
+    // Create a panel to hold the legend widget
+  var legend = ui.Panel({
+    style: {
+      position: 'bottom-left',
+      padding: '8px 15px'
+    }
+  });
+  
+  // Function to generate the legend
+  function addCategoricalLegend(panel, dict, title) {
+    
+    // Create and add the legend title.
+    var legendTitle = ui.Label({
+      value: title,
+      style: {
+        fontWeight: 'bold',
+        fontSize: '18px',
+        margin: '0 0 4px 0',
+        padding: '0'
+      }
+    });
+    panel.add(legendTitle);
+    
+    var loading = ui.Label('Loading legend...', {margin: '2px 0 4px 0'});
+    panel.add(loading);
+    
+    // Creates and styles 1 row of the legend.
+    var makeRow = function(color, name) {
+      // Create the label that is actually the colored box.
+      var colorBox = ui.Label({
+        style: {
+          backgroundColor: color,
+          // Use padding to give the box height and width.
+          padding: '8px',
+          margin: '0 0 4px 0'
+        }
+      });
+    
+      // Create the label filled with the description text.
+      var description = ui.Label({
+        value: name,
+        style: {margin: '0 0 4px 6px'}
+      });
+    
+      return ui.Panel({
+        widgets: [colorBox, description],
+        layout: ui.Panel.Layout.Flow('horizontal')
+      });
+    };
+    
+    // Get the list of palette colors and class names from the image.
+    var palette = dict.colors;
+    var names = dict.names;
+    loading.style().set('shown', false);
+    
+    for (var i = 0; i < names.length; i++) {
+      panel.add(makeRow(palette[i], names[i]));
+    }
+    
+    Map.add(panel);
+  }
+  
+  var landscan_global = ee.ImageCollection("projects/sat-io/open-datasets/ORNL/LANDSCAN_GLOBAL");
+  var landscan_2021 = landscan_global.sort('system:time_start',false).first().clip(aoi);
+  addCategoricalLegend(legend, dict, 'Population Sum (1 km2)');
+  Map.addLayer(landscan_2021.sldStyle(popcount_intervals), {}, 'Population Count Estimate LANDSCAN HD 2021');
+  
+  return landscan_2021.clip(aoi);
+}
+
+
+// define function for Summer Temperature
+// exports.export_summer_lst_night = 
+function export_summer_lst_night(aoi) {
+  
+  // calculate geometry of vector layer
+  var bbox = aoi.geometry();
+  
+  // determine location in south / north hemisphere (different summer months)
+  var centroid = bbox.centroid();
+  var listCoords = ee.Array.cat(centroid.coordinates(), 0); 
+  var yCoords = ee.List(listCoords).getInfo()[1];
+  
+  // south/ north
+  var south = ee.Number(yCoords).lt(0);
+  var shift = south.multiply(6).getInfo();
+  
+  // evaluation year
+  var start_year = ee.Date("2020-01-01");
+  var end_year = ee.Date("2021-01-01");
+  
+  // filter dataset to evaluation year
+  var yearFilter = ee.Filter.date(
+    start_year.advance(-1, "year"), 
+    end_year.advance(1, "year")
+    );
+  
+  // get summer months depends on location
+  var summerFilter = ee.Filter.calendarRange(5+shift, 9-shift, "month");
+
+  var lst = ee.ImageCollection("MODIS/061/MOD11A2")
+    //.map(maskClouds) // to be done: add MODIS cloud masking 
+    .select("LST_Night_1km") // day time temperature
+    .filter(yearFilter) // filter year
+    .filter(summerFilter) // filter season
+    .median() // get median
+    .multiply(0.02) // apply scale factor
+    .subtract(272.15) // apply offset
+    .clip(bbox); // limit bounds
+  
+  // visualization format
+  var vis = {
+    min: 20.0,
+    max: 40.0,
+    palette: ['blue', 'white', 'red'],
+  };
+  
+  // add layer for land surface temperature
+  Map.addLayer(lst, vis, 'MODIS LST Night 2020');
+  Map.centerObject(bbox, 8);
+  
+  // add legend to raster layer
+  var legend = helper.add_colorbar(vis, "LST Night");
+  Map.add(legend);
+  
+  // for some reason, the original projection altered after temporal filtering
+  // this line is necessary to set back valid projection for the output layer
+  var ref = ee.ImageCollection("MODIS/061/MOD11A2").first().projection();
+  
+  return lst.setDefaultProjection(ref);
+}
+
+/**
+ * Calculate summer land surface temperature: export summer average temperature to interactive dashboard.
+ * 
+ * This function is used to construct a MODIS-based LST gridded dataset based on location inputs from users.
+ * 
+ * @author Ka Hei Chow.
+ *
+ * @see  helper.add_colormap
+ * @link 'users/pinkychow1010/GEE:WorldBank/helper'
+ * @global
+ *
+ * @fires   add LST raster layer
+ * @listens select area of interest
+ *
+ * @param {ee.Geometry.Polygon}   vector        A vector layer which consists of a single polygon (admin boundary).
+ * 
+ * @return {ee.Image} Single LST data layer bounds by selected admin 2 boundary.
+ *
+ */
+// exports.export_summer_lst = 
+function export_summer_lst(aoi) {
+  
+  // calculate geometry of vector layer
+  var bbox = aoi.geometry();
+  
+  // determine location in south / north hemisphere (different summer months)
+  var centroid = bbox.centroid();
+  var listCoords = ee.Array.cat(centroid.coordinates(), 0); 
+  var yCoords = ee.List(listCoords).getInfo()[1];
+  
+  // south/ north
+  var south = ee.Number(yCoords).lt(0);
+  var shift = south.multiply(6).getInfo();
+  
+  // evaluation year
+  var start_year = ee.Date("2020-01-01");
+  var end_year = ee.Date("2021-01-01");
+  
+  // filter dataset to evaluation year
+  var yearFilter = ee.Filter.date(
+    start_year.advance(-1, "year"), 
+    end_year.advance(1, "year")
+    );
+  
+  // get summer months depends on location
+  var summerFilter = ee.Filter.calendarRange(5+shift, 9-shift, "month");
+
+  var lst = ee.ImageCollection("MODIS/061/MOD11A2")
+    //.map(maskClouds) // to be done: add MODIS cloud masking 
+    .select("LST_Day_1km") // day time temperature
+    .filter(yearFilter) // filter year
+    .filter(summerFilter) // filter season
+    .median() // get median
+    .multiply(0.02) // apply scale factor
+    .subtract(272.15) // apply offset
+    .clip(bbox); // limit bounds
+  
+  // visualization format
+  var vis = {
+    min: 20.0,
+    max: 40.0,
+    palette: ['blue', 'white', 'red'],
+  };
+  
+  // add layer for land surface temperature
+  Map.addLayer(lst, vis, 'MODIS LST Day 2020');
+  Map.centerObject(bbox, 8);
+  
+  // add legend to raster layer
+  var legend = helper.add_colorbar(vis, "LST Day");
+  Map.add(legend);
+  
+  // for some reason, the original projection altered after temporal filtering
+  // this line is necessary to set back valid projection for the output layer
+  var ref = ee.ImageCollection("MODIS/061/MOD11A2").first().projection();
+  
+  return lst.setDefaultProjection(ref);
+}
+
+// define function for Population Count
+
+/**
+ * World Population: export population density layer to interactive dashboard.
+ * 
+ * This function is used to construct a population count gridded dataset based on location inputs from users.
+ * 
+ * @author Ka Hei Chow.
+ *
+ * @see  helper.add_colormap
+ * @link 'users/pinkychow1010/GEE:WorldBank/helper'
+ * @global
+ *
+ * @fires   add population density raster layer
+ * @listens select area of interest
+ *
+ * @param {ee.Geometry.Polygon}   vector        A vector layer which consists of a single polygon (admin boundary).
+ * 
+ * @return {ee.Image} Single population count data layer bounds by selected admin 2 boundary.
+ *
+ */
+// exports.export_population = 
+function export_population(aoi) {
+  
+  // compute vector boundary
+  var bbox = aoi.geometry();
+  
+  // get population dataset (GHSL 2015)
+  var dataset = ee.ImageCollection('JRC/GHSL/P2016/POP_GPW_GLOBE_V1')
+                  .filter(ee.Filter.date('2015-01-01', '2015-12-31')).first();
+  var pop = dataset.select('population_count').clip(bbox); // limit bounds
+  
+  // visualization format
+  var vis = {
+    min: 0.0,
+    max: 200.0,
+    palette: ['060606', '337663', '337663', 'ffffff'],
+  };
+  
+  // add layer for population
+  Map.addLayer(pop, vis, 'GSHL Population 2015');
+  Map.centerObject(bbox, 8);
+  
+  // add legend to raster layer
+  var legend = helper.add_colorbar(vis, "Population");
+  Map.add(legend);
+
+  return pop;
+}
+  
+
+// define function for ESA world cover 2020
+
+/**
+ * Land Use Cover 2020: export land use cover (LULC) layer to interactive dashboard.
+ * 
+ * This function is used to construct a land use cover gridded dataset based on location inputs from users.
+ * 
+ * @author Ka Hei Chow.
+ *
+ * @see  helper.add_colormap
+ * @link 'users/pinkychow1010/GEE:WorldBank/helper'
+ * @global
+ *
+ * @fires   add LULC raster layer
+ * @listens select area of interest
+ *
+ * @param {ee.Geometry.Polygon}   vector        A vector layer which consists of a single polygon (admin boundary).
+ * 
+ * @return {ee.Image} Single land use data layer bounds by selected admin 2 boundary.
+ *
+ */
+// exports.export_landuse = 
+function export_landuse(aoi) {
+  
+  // calculate boundary
+  var bbox = aoi.geometry();
+  
+  // get land use cover dataset for boundary
+  var lulc = ee.ImageCollection('ESA/WorldCover/v200')
+  .first()
+  .clip(bbox);
+
+  // add LULC raster layer on map
+  Map.addLayer(lulc, {}, 'Land Use Cover 2020');
+  Map.centerObject(bbox, 8);
+  
+  // hard code class and color code for world cover dataset
+  var landcoverPalette = ee.List(['006400','ffbb22','ffff4c','f096ff','fa0000','b4b4b4','f0f0f0','0064c8','0096a0','00cf75','fae6a0']);
+
+  var newNames = ['Tree cover','Shrubland','Grassland','Cropland',
+  'Built-up','Bare / sparse vegetation','Snow and ice','Permanent water bodies',
+  'Herbaceous wetland','Mangroves','Moss and lichen'];
+  
+  // var names = ee.List(lulc.get('Map_class_names'));
+  // var landcoverPalette = ee.List(lulc.get('Map_class_palette'));
+  // var landcoverVisualization= ee.Dictionary({palette: landcoverPalette, min: 0, max: 44, format: 'png'});
+  
+  // Create the panel for the legend items.
+  var legend = ui.Panel({
+    style: {
+      position: 'bottom-right',
+      padding: '8px 15px'
+    }
+  });
+  
+  // Create and add the legend title.
+  var legendTitle = ui.Label({
+    value: 'Land Cover',
+    style: {
+      fontWeight: 'bold',
+      fontSize: '18px',
+      margin: '0 0 4px 0',
+      padding: '0'
+    }
+  });
+  legend.add(legendTitle);
+  
+  // Creates and styles 1 row of the legend.
+  var makeRow = function(color, name) {
+    // Create the label that is actually the colored box.
+    var color = color.getInfo();
+    var colorBox = ui.Label({
+      style: {
+        backgroundColor: '#' + color,
+        // Use padding to give the box height and width.
+        padding: '8px',
+        margin: '0 0 4px 0'
+      }
+    });
+  
+    // Create the label filled with the description text.
+    var description = ui.Label({
+      value: name,
+      style: {margin: '0 0 4px 6px'}
+    });
+  
+    return ui.Panel({
+      widgets: [colorBox, description],
+      layout: ui.Panel.Layout.Flow('horizontal')
+    });
+  };
+  
+  // // use getInfo to make the names client-side
+  // var newNames = names.getInfo();
+  
+  // add legend row by row
+  for (var i = 0; i < 11; i++) {
+      legend.add(makeRow(landcoverPalette.get(i), newNames[i]));
+  }
+  Map.add(legend);
+  
+  return lulc.int8();
+}
+
+// define function for extract dense urban areas
+// this script is used to extract urban areas (larger than 20%) and estimate urban density 
+
+/**
+ * Urban Density: export urban density layer to interactive dashboard.
+ * 
+ * This function is used to construct a urban density gridded dataset based on location inputs from users, 
+ * masked by urban regions (higher than 20% of areas within 5 km-radius circle).
+ * 
+ * @author Ka Hei Chow.
+ *
+ * @see  helper.add_colormap
+ * @link 'users/pinkychow1010/GEE:WorldBank/helper'
+ * @global
+ *
+ * @fires   add urban density raster layer
+ * @listens select area of interest
+ *
+ * @param {ee.Geometry.Polygon}   vector        A vector layer which consists of a single polygon (admin boundary).
+ * 
+ * @return {ee.Image} Single urban density data layer bounds by selected admin 2 boundary.
+ *
+ */
+// exports.export_urban_density = 
+function export_urban_density(aoi) {
+  
+  // compute boundary
+  var bbox = aoi.geometry();
+  
+  // get land use cover
+  var lulc = ee.ImageCollection('ESA/WorldCover/v200')
+  .first()
+  .clip(bbox);
+  
+  // extract urban land use
+  var urban_mask = lulc.eq(50);
+  
+  // calculate urban density within 5km radius (circle)
+  var reduceNeighborhood = urban_mask.reduceNeighborhood(
+    ee.Reducer.mean(), 
+    ee.Kernel.circle(5000, 'meters')
+  ).multiply(100).toByte();
+  
+  // visualization params
+  var palette = palettes.misc.tol_rainbow[7];
+  var vis = {min: 20, max: 80, palette: palette};
+  
+  // focus on dense areas, masked rural areas (< 20%)
+  var urban_threshold = reduceNeighborhood.gt(20);
+  var reduceNeighborhoodMasked = reduceNeighborhood.updateMask(urban_threshold);
+  
+  // add urban density layer to map
+  Map.addLayer(reduceNeighborhoodMasked, vis, 'Urban Density');
+  Map.centerObject(bbox, 8);
+  
+  // add legend
+  var legend = helper.add_colorbar(vis, "Urban Density");
+  Map.add(legend);
+  
+  return reduceNeighborhoodMasked;
+}
+
+
+exports.addWelcomePanel = function addWelcomePanel() {
+  
+  // set style for elements
+  var msg_style = {
+    whiteSpace: 'pre', 
+    textAlign: 'center', 
+    padding: '0px 50px 50px 50px',
+    width: '500px',
+    color: 'grey',
+    fontSize: '15px'
+  };
+  
+  var hd_style = {
+      whiteSpace: 'pre', 
+      textAlign: 'center', 
+      padding: '50px 50px 0px 50px',
+      width: '500px',
+      fontSize: '26px', 
+      fontWeight:'bold'
+    };
+  
+  var button_style = {
+    padding:'0% 42.5% 20% 42.5%',
+    position: 'top-center'
+  };
+  
+  var page_style = {border: '5px solid #c9c9c9', position: 'top-center'};
+  
+  // Page 1
+  var instructionMessage = ui.Label(
+  'To start download, select the dataset \nand your area of interest (ADMIN Level 2).\
+  \nYou can download the layer in desired resolution. \n \
+  As data is computed on-the-fly, \nloading might take a while.'
+  , msg_style);
+    
+  var heading = ui.Label('\n\n\n👋 Welcome!', hd_style);
+  
+  // Page 2
+  var instructionMessage_p2 = ui.Label(
+    'Check out all available datasets:\
+    \n\n🌾 Land Use Cover ➜ ESA World Cover 2020\
+    \n👥 Population Count ➜ Global Human Settlement Population Grid 2015\
+    \n🌃 Urban Density ➜ Urban ratio derived from World Cover\
+    \n🌞 Summer Day Temperature ➜ MODIS day Land Surface Temperature\
+    \n🌙 Summer Night Temperature ➜ MODIS night Land Surface Temperature\
+    \n and more!'
+    , msg_style);
+    
+  instructionMessage_p2.style().set({fontSize: '13.5px'});
+  
+  var heading_p2 = ui.Label('\n\n👋 Welcome!', hd_style);
+  
+  // Page 3
+  var instructionMessage_p3 = ui.Label('Click displayed label to view dataset details.\nYou can also download documentation below ⬇️', msg_style);
+    
+  instructionMessage_p3.style().set({padding: '0px 50px 20px 50px'});
+  
+  var heading_p3 = ui.Label('\n\n👋 Welcome!', hd_style);
+  
+  // Welcome panel first page
+  var nextButton = ui.Button('Next', p2);
+  nextButton.style().set(button_style);
+  
+  function hide(widget) {
+    widget.style().set({shown: false});
+  }
+  
+  function p2() {
+    hide(instructionPanel_p1);
+    Map.add(instructionPanel_p2);
+  }
+  
+  // Welcome panel second page
+  var nextButton_p3 = ui.Button('Next', p3);
+  nextButton_p3.style().set(button_style);
+  
+  function p3() {
+    hide(instructionPanel_p2);
+    Map.add(instructionPanel_p3);
+  }
+  
+  // Welcome panel third page
+  var okButton = ui.Button('Get Started', ok);
+  okButton.style().set(button_style);
+  
+  function ok() {hide(instructionPanel_p3)}
+  
+  // Documentation session
+  // button to export, will fire download url when clicked
+  var table = ee.FeatureCollection("projects/ee-pinkychow1010/assets/intraurban_layer_documentation");
+  var docButton = ui.Label({value: '📄️ Download Documentation', targetUrl: table.getDownloadURL()});
+  // downloadDoc);
+  docButton.style().set({
+    padding:'0% 25% 15% 25%',
+    position: 'top-center'
+  });
+
+  // construct pages
+  var instructionPanel_p1 = ui.Panel([heading, instructionMessage, nextButton]);
+  var instructionPanel_p2 = ui.Panel([heading_p2, instructionMessage_p2, nextButton_p3]);
+  var instructionPanel_p3 = ui.Panel([heading_p3, instructionMessage_p3, docButton, okButton]);
+
+  instructionPanel_p1.style().set(page_style);
+  instructionPanel_p2.style().set(page_style);
+  instructionPanel_p3.style().set(page_style);
+
+  Map.add(instructionPanel_p1);
+};

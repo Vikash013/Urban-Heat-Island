@@ -1,0 +1,37 @@
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// This script stores the style settings for the main explorer interface
+
+exports.bg_color = '#000000'; //'#002244';
+
+exports.description = {
+      color: '#FFFFFF', 
+      fontWeight: 'normal', 
+      fontSize: '12px', 
+      padding: '1px 25px 25px 25px', 
+      fontFamily: 'monospace'
+    };
+    
+exports.title = {
+      color: '#FFFFFF', 
+      fontWeight: 'bold', 
+      fontSize: '24px', 
+      whiteSpace: 'pre', 
+      textAlign: 'left', 
+      padding: '25px 1px 25px 25px'
+    };
+
+exports.selection = {padding: '1px 25px 25px 25px'};
+
+exports.headings = {
+      color: '#FFFFFF', 
+      fontWeight: 'normal', 
+      fontSize: '15px', 
+      whiteSpace: 'pre', 
+      textAlign: 'left', 
+      padding: '1px 25px 25px 25px'
+    };
+
+exports.start_button = {width: '80px'};
+
+exports.app_panel = {width: '500px'};

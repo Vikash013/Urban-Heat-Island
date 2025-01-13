@@ -1,0 +1,208 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var global_CISI = ee.Image("projects/sat-io/open-datasets/CISI/global_CISI"),
+    infrastructure = ee.ImageCollection("projects/sat-io/open-datasets/CISI/amount_infrastructure");
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▄▀
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄           COPY THIS URL LINK TO PLAY AROUND WITH THE CODE              ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄  https://code.earthengine.google.com/7baa534bd7a03aaf2ec0b4de927f88ff  ▄▀▄▀▄▀▄
+//▄▀▄▀▄                                                                        ▄▀▄▀▄▀▄
+//▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀
+
+
+
+// released under Open Source GPL License Copyright © 2023 Ka Hei Chow
+
+// ######################################### //
+// ######    Mulit-variable           ###### //
+// ######    Linked Map               ###### //
+// ######################################### //
+
+/**
+ * This is an example script for comparison maps where
+ * two different variables are displayed side by side
+ * in the form of choropleth map. 
+ */
+
+// import modules 
+var palettes = require('users/gena/packages:palettes');
+var analysis = require('users/pinkychow1010/WB_IntraUrban:analysis_utils');
+
+var global_CISI = ee.Image("projects/sat-io/open-datasets/CISI/global_CISI");
+
+// get area of interest: Pakistan
+var ADM2 = ee.FeatureCollection(
+  'projects/earthengine-legacy/assets/projects/sat-io/open-datasets/geoboundaries/CGAZ_ADM2'
+  );
+var pakistan = ADM2.filter(ee.Filter.eq('shapeGroup', 'PAK'));
+
+// visualize CI index
+var cisi = global_CISI.clip(pakistan);
+
+// get rwi data layer from community project
+var rwi_ds = ee.FeatureCollection("projects/sat-io/open-datasets/facebook/relative_wealth_index");
+
+// buffer point grid to fill gaps
+var aoi_rwi = rwi_ds.filterBounds(pakistan).map(
+  function(point) {
+  return point.buffer(2000);
+});
+
+// convert point grid to raster image
+var rwi = aoi_rwi.filter(ee.Filter.notNull(['rwi']))
+  .reduceToImage({
+    properties: ['rwi'],
+    reducer: ee.Reducer.mean(),
+});
+
+// arguments for choropleth map
+var vector = pakistan; // the vector for polygons
+var attribute = 'mean'; // property to display
+var palette = palettes.colorbrewer.RdBu[6]; // color map
+var log = 0; // option for log scale
+var class_n = 6; // number of class/ bins
+var title = "Mean"; // layer name
+var opacity = 0.9; // layer transparancy
+
+// sample raster values using reduceRegions
+
+// critical infrastructure spatial index
+var zonal = cisi.reduceRegions({
+  collection: vector,
+  scale: 500,
+  reducer:  ee.Reducer.mean()
+});
+
+// relative wealth index
+var rwi_zonal = rwi.reduceRegions({
+  collection: vector,
+  scale: 500,
+  reducer:  ee.Reducer.mean()
+});
+
+// visualization parameters for choropleth map
+var vis = {min:0,max:0.2,palette: ['orange','yellow','green','blue']};
+
+// Create a map for each visualization option.
+var map1 = ui.Map();
+map1.style().set('cursor', 'crosshair'); // set cursor shape
+
+// add RWI titile label
+map1.add(ui.Label('Relative Wealth Index', 
+{
+  position: 'bottom-center', 
+  fontSize: '22px',
+  backgroundColor: '#0047AB',
+  fontWeight: '500',
+  color: 'white'
+}
+));
+
+// display choropleth map
+analysis.choropleth_map(
+  rwi_zonal, 
+  attribute,
+  palette, 
+  opacity, 
+  log, 
+  class_n, 
+  title,
+  map1
+  );
+
+// set all map controls
+map1.setControlVisibility(true);
+
+// set right map
+var map2 = ui.Map();
+map2.style().set('cursor', 'crosshair'); // cursor shape
+
+// title for right map
+map2.add(ui.Label('Critical Infrastructure Spatial Index', 
+{
+  position: 'bottom-center', 
+  fontSize: '22px',
+  backgroundColor: '#0047AB',
+  fontWeight: '500',
+  color: 'white'
+}
+));
+
+// call function for choropleth map in the second (right) panel
+analysis.choropleth_map(
+  zonal, 
+  attribute, 
+  palette, 
+  opacity, 
+  log, 
+  class_n, 
+  title,
+  map2
+  );
+
+// set map control
+map2.setControlVisibility(true);
+
+// link control between two maps
+var linker = ui.Map.Linker([map1, map2]);
+
+// create a grid of maps.
+var mapGrid = ui.Panel(
+    [
+      ui.Panel([map1], null, {stretch: 'both'}),
+      ui.Panel([map2], null, {stretch: 'both'})
+    ],
+    ui.Panel.Layout.Flow('horizontal'), {stretch: 'both'});
+
+// center map
+map1.centerObject(pakistan,5);
+
+var mainPanel = ui.Panel(); // side bar
+mainPanel.style().set({
+    width: '240px',
+    backgroundColor: 'black'
+  }); // styling main panel
+
+// Add the maps and title to the ui.root.
+ui.root.widgets().reset([mainPanel, mapGrid]);
+ui.root.setLayout(ui.Panel.Layout.Flow('horizontal'));
+
+// set up title
+var title = ui.Label("Comparison Panel");
+title.style().set({
+    'position':  'top-center',
+    'fontSize': '24px',
+    'color': 'white',
+    'fontWeight': 'bold',
+    'fontFamily': 'serif',
+    'backgroundColor': 'black',
+    'padding': '10px 10px 4px 4px',
+    });
+
+// content for main panel
+mainPanel.add(title);
+
+// // customized basemap to enhance visuals 
+var basemap = require('users/pinkychow1010/WB_IntraUrban:basemap_resources'); 
+var new_basemap = basemap.getCustomBasemap('MutedMonotone');
+
+// customized basemap to enhance visuals
+map1.setOptions(undefined, {'Custom': new_basemap});
+map2.setOptions(undefined, {'Custom': new_basemap});
+
+map1.centerObject(pakistan,5);
+map2.centerObject(pakistan,5);
+
+
+
+
+
+
+
+
+
+
+
+
