@@ -1,6 +1,6 @@
 ### Google Earth Engine Code
 
-| **folder**       | **description**                                                             |
+| **Folder**       | **Description**                                                             |
 |------------------|-----------------------------------------------------------------------------|
 | analysis         | urban risk analysis notebooks                                               |
 | app_development  | notebooks on development specific dashboard functions (eg. inspector tools) |
